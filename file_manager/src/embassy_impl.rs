@@ -17,21 +17,21 @@ use alpa::embedded_sdmmc_fs::VM;
 
 static GLOBAL_ALLOC_LOCK: Mutex<CriticalSectionRawMutex, ()> = Mutex::new(());
 
-pub struct EspAlloc;
+pub struct ExternalAlloc;
 
-impl EspAlloc {
+impl ExternalAlloc {
     pub fn default() -> Self {
         Self
     }
 }
 
-impl Clone for EspAlloc {
+impl Clone for ExternalAlloc {
     fn clone(&self) -> Self {
         Self
     }
 }
 
-unsafe impl Allocator for EspAlloc {
+unsafe impl Allocator for ExternalAlloc {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         // esp_println::println!("--------------------------");
         // esp_println::println!("layout = {:?}", layout);
@@ -52,12 +52,39 @@ unsafe impl Allocator for EspAlloc {
     }
 }
 
+pub struct InternalAlloc;
+
+impl InternalAlloc {
+    pub fn default() -> Self {
+        Self
+    }
+}
+
+impl Clone for InternalAlloc {
+    fn clone(&self) -> Self {
+        Self
+    }
+}
+
+unsafe impl Allocator for InternalAlloc {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        esp_alloc::InternalMemory.allocate(layout)
+    }
+
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        unsafe {
+            esp_alloc::InternalMemory.deallocate(ptr, layout)
+        }
+    }
+}
+
 pub type ConcreteSpi<'a> = ExclusiveDevice<Spi<'a, Blocking>, Output<'a>, Delay>;
 pub type ConcreteDelay = Delay;
 pub type FsBlockDevice = SdCard<ConcreteSpi<'static>, ConcreteDelay>;
 
 pub type BlkDev = FsBlockDevice;
-pub type ExtAlloc = EspAlloc;
+pub type ExtAlloc = ExternalAlloc;
+pub type IntAlloc = InternalAlloc;
 pub type FMan = FileManager;
 pub type FsError = embedded_sdmmc::SdCardError;
 

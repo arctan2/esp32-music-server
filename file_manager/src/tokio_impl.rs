@@ -1,7 +1,7 @@
 use super::*;
 use allocator_api2::alloc::{Allocator, AllocError, Layout};
 use core::ptr::NonNull;
-use alpa::embedded_sdmmc_ram_device::esp_alloc::ExternalMemory;
+use alpa::embedded_sdmmc_ram_device::esp_alloc::{ExternalMemory, InternalMemory};
 pub use alpa::embedded_sdmmc_ram_device::{
     allocators,
 };
@@ -9,21 +9,47 @@ use alpa::embedded_sdmmc_fs::VM;
 pub use alpa::embedded_sdmmc_ram_device::block_device::{FsBlockDeviceError, FsBlockDevice};
 pub use std::sync::OnceLock;
 
-pub struct EspAlloc(pub allocators::SimAllocator<23>);
+pub struct ExternalAlloc(pub allocators::SimAllocator<23>);
 
-impl EspAlloc {
+impl ExternalAlloc {
     pub fn default() -> Self {
         Self(ExternalMemory)
     }
 }
 
-impl Clone for EspAlloc {
+impl Clone for ExternalAlloc {
     fn clone(&self) -> Self {
-        EspAlloc(ExternalMemory)
+        ExternalAlloc(ExternalMemory)
     }
 }
 
-unsafe impl Allocator for EspAlloc {
+unsafe impl Allocator for ExternalAlloc {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        self.0.allocate(layout)
+    }
+
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        unsafe {
+            self.0.deallocate(ptr, layout)
+        }
+    }
+}
+
+pub struct InternalAlloc(pub allocators::SimAllocator<17>);
+
+impl InternalAlloc {
+    pub fn default() -> Self {
+        Self(InternalMemory)
+    }
+}
+
+impl Clone for InternalAlloc {
+    fn clone(&self) -> Self {
+        InternalAlloc(InternalMemory)
+    }
+}
+
+unsafe impl Allocator for InternalAlloc {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         self.0.allocate(layout)
     }
@@ -36,7 +62,8 @@ unsafe impl Allocator for EspAlloc {
 }
 
 pub type BlkDev = FsBlockDevice;
-pub type ExtAlloc = EspAlloc;
+pub type ExtAlloc = ExternalAlloc;
+pub type IntAlloc = InternalAlloc;
 pub type FMan = FileManager;
 pub type FsError = FsBlockDeviceError;
 
