@@ -1055,6 +1055,7 @@ version = "0.1.0"
 dependencies = [
  "allocator-api2",
  "alpa",
+ "critical-section",
  "embassy-sync 0.7.2",
  "embedded-hal 1.0.0",
  "embedded-hal-bus",
@@ -1777,6 +1778,7 @@ dependencies = [
  "alpa",
  "embassy-executor",
  "embassy-futures",
+ "embassy-sync 0.7.2",
  "embedded-sdmmc",
  "esp-alloc",
  "esp-println",

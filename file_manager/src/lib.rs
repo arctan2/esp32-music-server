@@ -9,7 +9,6 @@ use alpa::{Column, ColumnType, Value, Row};
 pub use runtime::{Mutex};
 use embedded_sdmmc::{
     BlockDevice,
-    TimeSource,
     RawVolume,
     RawFile,
     RawDirectory,
@@ -57,14 +56,14 @@ pub enum FileType {
     Dir(RawDirectory)
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "tokio", derive(Debug))]
 pub enum CardState {
     NoCard { device: BlkDev, timer: DummyTimesource },
     Active { vm: VolumeManager<BlkDev, DummyTimesource, 4, 4, 1>, vol: RawVolume },
     Processing
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "tokio", derive(Debug))]
 pub struct FileManagerState {
     pub card_state: CardState
 }
@@ -97,7 +96,7 @@ impl FileManagerState {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "tokio", derive(Debug))]
 pub struct FileManager {
     pub state: Mutex<FileManagerState>,
 }
@@ -228,11 +227,11 @@ impl FileManager {
 
     pub async fn with_root_dir<F, R>(&self, f: F) -> Result<R, FManError<<FsBlockDevice as BlockDevice>::Error>>
     where
-        F: FnOnce(RawDirectory) -> Result<R, FManError<<FsBlockDevice as BlockDevice>::Error>>,
+        F: FnOnce(RawDirectory, &VolumeManager<BlkDev, DummyTimesource, 4, 4, 1>) -> Result<R, FManError<<FsBlockDevice as BlockDevice>::Error>>,
     {
         let state = self.state.lock().await;
         if let CardState::Active{ ref vm, ref vol } = state.card_state {
-            return f(Self::root_dir(vm, vol)?);
+            return f(Self::root_dir(vm, vol)?, vm);
         }
         Err(FManError::CardNotActive)
     }

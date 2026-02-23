@@ -84,7 +84,7 @@ impl From<FManError<FsBlockDeviceError>> for InitError {
     }
 }
 
-pub async fn init_file_system(allocator: ExtAlloc) -> Result<(), InitError>
+pub async fn init_file_system() -> Result<(), InitError>
 where 
     embedded_sdmmc::Error<<FsBlockDevice as BlockDevice>::Error>: Into<embedded_sdmmc::Error<FsError>>
 {
@@ -99,7 +99,7 @@ where
             let db_dir = root_dir.open_dir(consts::DB_DIR)?;
             let db_dir = db_dir.to_raw_directory();
             let stuff_dir = DbDirSdmmc::new(db_dir);
-            let mut db = Database::new_init(VM::new(vm), stuff_dir, allocator.clone())?;
+            let mut db = Database::new_init(VM::new(vm), stuff_dir, ExtAlloc::default())?;
 
             {
                 let name = Column::new("name", ColumnType::Chars).primary();
@@ -107,7 +107,7 @@ where
                 db.new_table_begin(consts::COUNT_TRACKER_TABLE);
                 db.add_column(name)?;
                 db.add_column(count)?;
-                let _ = db.create_table(allocator.clone())?;
+                let _ = db.create_table(ExtAlloc::default())?;
             }
 
             {
@@ -118,7 +118,7 @@ where
                 db.add_column(name)?;
                 db.add_column(count)?;
                 db.add_column(size)?;
-                let _ = db.create_table(allocator.clone())?;
+                let _ = db.create_table(ExtAlloc::default())?;
             }
 
             {
@@ -127,23 +127,23 @@ where
                 db.new_table_begin(consts::MUSIC_TABLE);
                 db.add_column(name)?;
                 db.add_column(count)?;
-                let _ = db.create_table(allocator.clone())?;
+                let _ = db.create_table(ExtAlloc::default())?;
             }
 
-            let count_tracker = db.get_table(consts::COUNT_TRACKER_TABLE, allocator.clone())?;
+            let count_tracker = db.get_table(consts::COUNT_TRACKER_TABLE, ExtAlloc::default())?;
 
             {
-                let mut row = Row::new_in(allocator.clone());
+                let mut row = Row::new_in(ExtAlloc::default());
                 row.push(Value::Chars(consts::FILES_TABLE.as_bytes()));
                 row.push(Value::Int(1));
-                db.insert_to_table(count_tracker, row, allocator.clone())?;
+                db.insert_to_table(count_tracker, row, ExtAlloc::default())?;
             }
 
             {
-                let mut row = Row::new_in(allocator.clone());
+                let mut row = Row::new_in(ExtAlloc::default());
                 row.push(Value::Chars(consts::MUSIC_TABLE.as_bytes()));
                 row.push(Value::Int(1));
-                db.insert_to_table(count_tracker, row, allocator.clone())?;
+                db.insert_to_table(count_tracker, row, ExtAlloc::default())?;
             }
 
             Ok(())

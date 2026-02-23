@@ -5,7 +5,7 @@ use picoserve::routing::{post, get, delete, parse_path_segment, Router, PathRout
 use picoserve::response::{Response, IntoResponse};
 use file_manager::{init_file_manager, DummyTimesource};
 use server::{CatchAll, HOME_PAGE};
-use file_manager::{BlkDev, init_file_system, ExtAlloc};
+use file_manager::{BlkDev, init_file_system};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -20,14 +20,14 @@ async fn main() {
     let config = picoserve::Config::new(picoserve::Timeouts {
         start_read_request: Some(Duration::from_secs(5)),
         persistent_start_read_request: None,
-        read_request: Some(Duration::from_secs(1)),
+        read_request: Some(Duration::from_secs(5)),
         write: Some(Duration::from_secs(1)),
     });
 
     tokio::task::LocalSet::new()
         .run_until(async {
             loop {
-                match init_file_system(ExtAlloc::default()).await {
+                match init_file_system().await {
                     Ok(()) => break,
                     Err(e) => {
                         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
@@ -36,7 +36,8 @@ async fn main() {
                 }
             }
 
-            server::chunks::init_all().await;
+            server::chunks::init().await;
+
             tokio::task::spawn_local(server::chunks::task_file_uploader());
 
             loop {

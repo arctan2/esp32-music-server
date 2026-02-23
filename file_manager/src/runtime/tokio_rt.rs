@@ -36,6 +36,14 @@ impl<T, const N: usize> Receiver<T, N> {
     pub async fn recv(&self) -> T {
         self.s.lock().await.recv().await.unwrap()
     }
+
+    pub async fn try_recv(&self) -> Option<T> {
+        self.s.lock().await.try_recv().ok()
+    }
+
+    pub async fn is_empty(&self) -> bool {
+        self.s.lock().await.is_empty()
+    }
 }
 
 impl<T, const N: usize> Channel<T, N> {
@@ -56,8 +64,16 @@ impl<T, const N: usize> Channel<T, N> {
         self.rx.lock().await.recv().await.unwrap()
     }
 
+    pub async fn try_recv(&self) -> Option<T> {
+        self.rx.lock().await.try_recv().ok()
+    }
+
     pub async fn send(&self, msg: T) {
         self.tx.send(msg).await.unwrap();
+    }
+
+    pub async fn is_empty(&self) -> bool {
+        self.rx.lock().await.is_empty()
     }
 }
 

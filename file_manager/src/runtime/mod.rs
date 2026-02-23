@@ -6,14 +6,15 @@ mod tokio_rt;
 
 #[cfg(feature = "embassy")]
 mod embassy_rt;
+
 #[cfg(feature = "embassy")]
 use embassy_rt::{
     Channel as ChannelInner,
     Signal as SignalInner,
     Mutex as MutexInner,
     MutexGuard as MutexGuardInner,
-    Sender as SenderInner,
-    Receiver as ReceiverInner
+    // Sender as SenderInner,
+    // Receiver as ReceiverInner
 };
 
 #[cfg(feature = "tokio")]
@@ -22,55 +23,63 @@ use tokio_rt::{
     Signal as SignalInner,
     Mutex as MutexInner,
     MutexGuard as MutexGuardInner,
-    Sender as SenderInner,
-    Receiver as ReceiverInner
+    // Sender as SenderInner,
+    // Receiver as ReceiverInner
 };
 
-#[derive(Debug)]
+#[cfg_attr(feature = "tokio", derive(Debug))]
 pub struct Channel<T, const N: usize> {
     inner: ChannelInner<T, N>,
 }
 
-#[derive(Debug)]
-pub struct Sender<T, const N: usize> {
-    inner: SenderInner<T, N>,
-}
+// #[cfg_attr(feature = "tokio", derive(Debug))]
+// pub struct Sender<T, const N: usize> {
+//     inner: SenderInner<T, N>,
+// }
+// 
+// impl <T, const N: usize> Clone for Sender<T, N> {
+//     fn clone(&self) -> Self {
+//         Self { inner: self.inner.clone() }
+//     }
+// }
+// 
+// impl<T, const N: usize> Sender<T, N> {
+//     pub async fn send(&self, msg: T) {
+//         self.inner.send(msg).await;
+//     }
+// }
+// 
+// #[cfg_attr(feature = "tokio", derive(Debug))]
+// pub struct Receiver<T, const N: usize> {
+//     inner: ReceiverInner<T, N>,
+// }
 
-impl <T, const N: usize> Clone for Sender<T, N> {
-    fn clone(&self) -> Self {
-        Self { inner: self.inner.clone() }
-    }
-}
-
-impl<T, const N: usize> Sender<T, N> {
-    pub async fn send(&self, msg: T) {
-        self.inner.send(msg).await;
-    }
-}
-
-#[derive(Debug)]
-pub struct Receiver<T, const N: usize> {
-    inner: ReceiverInner<T, N>,
-}
-
-impl<T, const N: usize> Receiver<T, N> {
-    pub async fn recv(&self) -> T {
-        self.inner.recv().await
-    }
-}
+// impl<T, const N: usize> Receiver<T, N> {
+//     pub async fn recv(&self) -> T {
+//         self.inner.recv().await
+//     }
+// 
+//     pub async fn try_recv(&self) -> Option<T> {
+//         self.inner.try_recv().await
+//     }
+// 
+//     pub async fn is_empty(&self) -> bool {
+//         self.inner.is_empty().await
+//     }
+// }
 
 impl<T, const N: usize> Channel<T, N> {
     pub fn new() -> Self {
         Self { inner: ChannelInner::new() }
     }
 
-    pub fn sender(&self) -> Sender<T, N> {
-        Sender { inner: self.inner.sender() }
-    }
+    // pub fn sender(&self) -> Sender<T, N> {
+    //     Sender { inner: self.inner.sender() }
+    // }
 
-    pub fn receiver(self) -> Receiver<T, N> {
-        Receiver { inner: self.inner.receiver() }
-    }
+    // pub fn receiver(self) -> Receiver<T, N> {
+    //     Receiver { inner: self.inner.receiver() }
+    // }
 
     pub async fn recv(&self) -> T {
         self.inner.recv().await
@@ -79,9 +88,17 @@ impl<T, const N: usize> Channel<T, N> {
     pub async fn send(&self, msg: T) {
         self.inner.send(msg).await;
     }
+
+    pub async fn try_recv(&self) -> Option<T> {
+        self.inner.try_recv().await
+    }
+
+    pub async fn is_empty(&self) -> bool {
+        self.inner.is_empty().await
+    }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "tokio", derive(Debug))]
 pub struct Signal<T> {
     inner: SignalInner<T>,
 }
@@ -104,12 +121,12 @@ impl<T> Signal<T> {
     }
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "tokio", derive(Debug))]
 pub struct Mutex<T> {
     inner: MutexInner<T>
 }
 
-#[derive(Debug)]
+#[cfg_attr(feature = "tokio", derive(Debug))]
 pub struct MutexGuard<'a, T> {
     inner: MutexGuardInner<'a, T>
 }

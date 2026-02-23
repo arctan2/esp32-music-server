@@ -98,6 +98,7 @@ pub fn router() -> Router<impl PathRouter> {
         .route(("/download", CatchAll), get(server::handle_download))
         .route(("/fs", CatchAll), get(server::handle_fs))
         .route("/db", delete(server::handle_delete_db))
+        .route(("/fs-delete", parse_path_segment::<String>()), delete(server::handle_fs_file_delete))
         .nest("/files", files_routes())
         .nest("/upload", upload_routes())
 }

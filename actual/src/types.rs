@@ -4,7 +4,7 @@ extern crate alloc;
 use serde::{Deserialize, Serialize};
 pub use alloc::string::String;
 pub use alloc::vec::Vec;
-pub use alloc::boxed::Box;
+pub use allocator_api2::boxed::Box;
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct WifiSsidPwd {

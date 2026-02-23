@@ -16,20 +16,24 @@ pub(crate) mod internal_prelude {
 use internal_prelude::*;
 use alloc::format;
 
+#[cfg(feature = "std-mode")]
+mod tokio_impl;
+
+#[cfg(feature = "embassy-mode")]
+mod embassy_impl;
+
 pub mod file_uploader;
 pub mod chunks;
 
 use alpa::embedded_sdmmc_fs::{DbDirSdmmc, VM};
 use alpa::db::Database;
 use alpa::{Query, QueryExecutor, Value};
-use embedded_sdmmc::{BlockDevice, RawDirectory, TimeSource, VolumeManager};
+use embedded_sdmmc::{BlockDevice, RawDirectory, VolumeManager};
 use picoserve::routing::{PathDescription};
 use picoserve::response::{IntoResponse};
 use picoserve::request::{RequestBody, RequestParts, Path};
 use picoserve::extract::{FromRequest};
 use picoserve::io::Read;
-use picoserve::response::Response;
-use allocator_api2::alloc::Allocator;
 use allocator_api2::vec::Vec;
 use picoserve::response::chunked::{ChunksWritten, ChunkedResponse, ChunkWriter, Chunks};
 use file_manager::{
@@ -45,14 +49,6 @@ use file_manager::{
     DummyTimesource,
     FsBlockDevice
 };
-
-#[cfg(feature = "embassy-mode")]
-use esp_println::println;
-#[cfg(feature = "std-mode")]
-use std::println;
-
-#[cfg(feature = "embassy-mode")]
-use file_manager::{ConcreteSpi, ConcreteDelay};
 
 pub static HOME_PAGE: &str = include_str!("./html/home.html");
 
@@ -79,16 +75,15 @@ impl<T: Copy + core::fmt::Debug> PathDescription<T> for CatchAll {
     }
 }
 
-pub struct FsIterChunks<D: BlockDevice, A: Allocator + Clone> {
+pub struct FsIterChunks<D: BlockDevice> {
     pub file: Result<FileType, FManError<D::Error>>,
     #[cfg(feature = "embassy-mode")]
-    pub fman: &'static FMan<ConcreteSpi<'static>, ConcreteDelay>,
+    pub fman: &'static FMan,
     #[cfg(feature = "std-mode")]
     pub fman: &'static FMan,
-    pub allocator: A
 }
 
-impl <D: BlockDevice, A: Allocator + Clone> Chunks for FsIterChunks<D, A> {
+impl <D: BlockDevice> Chunks for FsIterChunks<D> {
     fn content_type(&self) -> &'static str {
         "text/html"
     }
@@ -103,12 +98,12 @@ impl <D: BlockDevice, A: Allocator + Clone> Chunks for FsIterChunks<D, A> {
                     FileType::Dir(dir) => {
                         let state = self.fman.state.lock().await;
                         if let CardState::Active{ ref vm, vol: _ } = state.card_state {
-                            let mut files: Vec<Vec<u8, A>, A> = Vec::new_in(self.allocator.clone());
+                            let mut files: Vec<Vec<u8, ExtAlloc>, ExtAlloc> = Vec::new_in(ExtAlloc::default());
                             vm.iterate_dir(dir, |entry| {
                                 if entry.attributes.is_volume() {
                                     return;
                                 }
-                                let mut buf: Vec<u8, A> = Vec::new_in(self.allocator.clone());
+                                let mut buf: Vec<u8, ExtAlloc> = Vec::new_in(ExtAlloc::default());
                                 let is_dir = entry.attributes.is_directory();
                                 buf.extend_from_slice(b"<div>");
                                 buf.extend_from_slice(b"<span class=\"size\">");
@@ -142,7 +137,7 @@ impl <D: BlockDevice, A: Allocator + Clone> Chunks for FsIterChunks<D, A> {
                                 if ext == b"TXT" {
                                     chunk_writer.write_chunk(b"<pre>").await?;
                                 }
-                                let mut buffer: Vec<u8, A> = Vec::with_capacity_in(1024, self.allocator.clone());
+                                let mut buffer: Vec<u8, ExtAlloc> = Vec::with_capacity_in(1024, ExtAlloc::default());
                                 buffer.resize(buffer.capacity(), 0);
                                 buffer.fill(0);
                                 loop {
@@ -201,13 +196,12 @@ where W: picoserve::io::Write,
     fn call<'a>(mut self, root_dir: RawDirectory, vm: &'a VolumeManager<BlkDev, DummyTimesource, 4, 4, 1>) -> Self::Fut<'a> {
         async move {
             let root_dir = root_dir.to_directory(vm);
-            let allocator = ExtAlloc::default();
 
             match root_dir.open_dir(consts::DB_DIR) {
                 Ok(dir) => {
                     let db_dir = DbDirSdmmc::new(dir.to_raw_directory());
                     let vm = VM::new(vm);
-                    let mut db = match Database::new_init(vm, db_dir, allocator.clone()) {
+                    let mut db = match Database::new_init(vm, db_dir, ExtAlloc::default()) {
                         Ok(d) => d,
                         Err(e) => {
                             if let Err(e) = self.chunk_writer.write_chunk(format!("error: {:?}", e).as_bytes()).await {
@@ -218,7 +212,7 @@ where W: picoserve::io::Write,
                     };
                 
 
-                    let files_table = match db.get_table("files", allocator.clone()) {
+                    let files_table = match db.get_table("files", ExtAlloc::default()) {
                         Ok(t) => t,
                         Err(e) => {
                             if let Err(e) = self.chunk_writer.write_chunk(format!("table not found: {:?}", e).as_bytes()).await {
@@ -229,7 +223,7 @@ where W: picoserve::io::Write,
                     };
 
                     {
-                        let query = Query::<_, &str>::new(files_table, allocator.clone());
+                        let query = Query::<_, &str>::new(files_table, ExtAlloc::default());
                         match QueryExecutor::new(
                             query, &mut db.table_buf, &mut db.buf1, &mut db.buf2,
                             &db.file_handler.page_rw.as_ref().unwrap()
@@ -274,7 +268,7 @@ where W: picoserve::io::Write,
 
 pub struct FilesIterChunks {
     #[cfg(feature = "embassy-mode")]
-    pub fman: &'static FMan<ConcreteSpi<'static>, ConcreteDelay>,
+    pub fman: &'static FMan,
     #[cfg(feature = "std-mode")]
     pub fman: &'static FMan,
 }
@@ -300,16 +294,15 @@ impl Chunks for FilesIterChunks {
     }
 }
 
-pub struct DownloadIterChunks<D: BlockDevice, A: Allocator + Clone> {
+pub struct DownloadIterChunks<D: BlockDevice> {
     pub file: Result<FileType, FManError<D::Error>>,
     #[cfg(feature = "embassy-mode")]
-    pub fman: &'static FMan<ConcreteSpi<'static>, ConcreteDelay>,
+    pub fman: &'static FMan,
     #[cfg(feature = "std-mode")]
     pub fman: &'static FMan,
-    pub allocator: A
 }
 
-impl <D: BlockDevice, A: Allocator + Clone> Chunks for DownloadIterChunks<D, A> {
+impl <D: BlockDevice> Chunks for DownloadIterChunks<D> {
     fn content_type(&self) -> &'static str {
         ""
     }
@@ -326,7 +319,7 @@ impl <D: BlockDevice, A: Allocator + Clone> Chunks for DownloadIterChunks<D, A> 
                     FileType::File(_, f) => {
                         let state = self.fman.state.lock().await;
                         if let CardState::Active{ ref vm, vol: _ } = state.card_state {
-                            let mut buffer: Vec<u8, A> = Vec::with_capacity_in(1024, self.allocator.clone());
+                            let mut buffer: Vec<u8, ExtAlloc> = Vec::with_capacity_in(1024, ExtAlloc::default());
                             buffer.resize(buffer.capacity(), 0);
                             buffer.fill(0);
                             loop {
@@ -405,14 +398,14 @@ pub async fn handle_fs(path: String) -> impl IntoResponse {
     let file = fman.resolve_path_iter(&path).await;
 
     #[cfg(feature = "std-mode")] {
-        ChunkedResponse::new(FsIterChunks::<BlkDev, ExtAlloc> { 
-            file, fman, allocator: ExtAlloc::default()
+        ChunkedResponse::new(FsIterChunks::<BlkDev> { 
+            file, fman
         })
     }
 
     #[cfg(feature = "embassy-mode")] {
-        ChunkedResponse::new(FsIterChunks::<BlkDev<ConcreteSpi<'static>, ConcreteDelay>, ExtAlloc> { 
-            file, fman, allocator: ExtAlloc::default()
+        ChunkedResponse::new(FsIterChunks::<BlkDev> { 
+            file, fman
         })
     }
 }
@@ -423,17 +416,9 @@ pub async fn handle_files() -> impl IntoResponse {
     #[cfg(feature = "std-mode")]
     let fman = get_file_manager();
 
-    #[cfg(feature = "std-mode")] {
-        ChunkedResponse::new(FilesIterChunks { 
-            fman
-        })
-    }
-
-    #[cfg(feature = "embassy-mode")] {
-        ChunkedResponse::new(FilesIterChunks { 
-            fman
-        })
-    }
+    ChunkedResponse::new(FilesIterChunks {
+        fman
+    })
 }
 
 pub async fn handle_download(path: String) -> impl IntoResponse {
@@ -445,14 +430,14 @@ pub async fn handle_download(path: String) -> impl IntoResponse {
     let file = fman.resolve_path_iter(&path).await;
 
     #[cfg(feature = "std-mode")] {
-        ChunkedResponse::new(DownloadIterChunks::<BlkDev, ExtAlloc> { 
-            file, fman, allocator: ExtAlloc::default()
+        ChunkedResponse::new(DownloadIterChunks::<BlkDev> { 
+            file, fman 
         })
     }
 
     #[cfg(feature = "embassy-mode")] {
-        ChunkedResponse::new(DownloadIterChunks::<BlkDev<ConcreteSpi<'static>, ConcreteDelay>, ExtAlloc> { 
-            file, fman, allocator: ExtAlloc::default()
+        ChunkedResponse::new(DownloadIterChunks::<BlkDev> { 
+            file, fman
         })
     }
 }
@@ -469,14 +454,13 @@ impl AsyncRootFn<&'static str> for DeleteFileAsync {
     fn call<'a>(self, root_dir: RawDirectory, vm: &'a VolumeManager<BlkDev, DummyTimesource, 4, 4, 1>) -> Self::Fut<'a> {
         async move {
             let root_dir = root_dir.to_directory(vm);
-            let allocator = ExtAlloc::default();
             let db_dir = root_dir.open_dir(consts::DB_DIR).map_err(FManError::SdErr)?.to_raw_directory();
             let files_dir = root_dir.open_dir(consts::FILES_DIR).map_err(FManError::SdErr)?;
 
             let vm = VM::new(vm);
-            let mut db = Database::new_init(vm, DbDirSdmmc::new(db_dir), allocator.clone()).map_err(FManError::DbErr)?;
+            let mut db = Database::new_init(vm, DbDirSdmmc::new(db_dir), ExtAlloc::default()).map_err(FManError::DbErr)?;
         
-            let files_table = db.get_table("files", allocator.clone()).map_err(FManError::DbErr)?;
+            let files_table = db.get_table("files", ExtAlloc::default()).map_err(FManError::DbErr)?;
 
             match files_dir.delete_file_in_dir(self.name.as_str()) {
                 Err(embedded_sdmmc::Error::NotFound) => (),
@@ -484,7 +468,7 @@ impl AsyncRootFn<&'static str> for DeleteFileAsync {
                 Ok(()) => ()
             }
 
-            db.delete_from_table(files_table, Value::Chars(self.name.as_bytes()), allocator.clone()).map_err(FManError::DbErr)?;
+            db.delete_from_table(files_table, Value::Chars(self.name.as_bytes()), ExtAlloc::default()).map_err(FManError::DbErr)?;
 
             Ok("success")
         }
@@ -499,6 +483,26 @@ pub async fn handle_delete_file(name: String) -> impl IntoResponse {
 
     let r = DeleteFileAsync { name };
     fman.with_root_dir_async(r).await.map_err(|e| picoserve::response::DebugValue(e))
+}
+
+pub async fn handle_fs_file_delete(name: String) -> impl IntoResponse {
+    #[cfg(feature = "embassy-mode")]
+    let fman = get_file_manager().await;
+    #[cfg(feature = "std-mode")]
+    let fman = get_file_manager();
+
+    fman.with_root_dir(move |root_dir, vm| {
+        let root_dir = root_dir.to_directory(vm);
+        let files_dir = root_dir.open_dir(consts::FILES_DIR).map_err(FManError::SdErr)?;
+
+        match files_dir.delete_file_in_dir(name.as_str()) {
+            Err(embedded_sdmmc::Error::NotFound) => (),
+            Err(e) => return Err(FManError::SdErr(e)),
+            Ok(()) => ()
+        }
+
+        Ok("success")
+    }).await.map_err(|e| picoserve::response::DebugValue(e))
 }
 
 struct DeleteDbAsync;

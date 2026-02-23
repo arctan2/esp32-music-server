@@ -14,10 +14,10 @@ pub async fn http_server_task(
     let (rx_buf, tx_buf, http_buf) = static_resources.init(([0; 1024], [0; 1024], [0; 2048]));
     let app = Box::new_in(router::router(), esp_alloc::ExternalMemory);
     let config = picoserve::Config::new(picoserve::Timeouts {
-        start_read_request: Some(Duration::from_secs(5)),
+        start_read_request: Some(Duration::from_secs(2)),
         persistent_start_read_request: None,
-        read_request: Some(Duration::from_secs(1)),
-        write: Some(Duration::from_secs(1)),
+        read_request: Some(Duration::from_secs(5)),
+        write: Some(Duration::from_secs(2)),
     });
 
     println!("HTTP Server listening on port 80...");

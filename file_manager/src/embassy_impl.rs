@@ -9,56 +9,70 @@ use embedded_hal_bus::spi::ExclusiveDevice;
 use allocator_api2::alloc::{Allocator, AllocError, Layout};
 use core::ptr::NonNull;
 use esp_println::{println};
-pub use embedded_sdmmc::{SdCard as FsBlockDevice, SdCardError};
+pub use embedded_sdmmc::{SdCard, SdCardError};
 pub use embassy_sync::once_lock::OnceLock;
+use embassy_sync::blocking_mutex::Mutex;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use alpa::embedded_sdmmc_fs::VM;
 
-pub struct EspAlloc(pub esp_alloc::ExternalMemory);
+static GLOBAL_ALLOC_LOCK: Mutex<CriticalSectionRawMutex, ()> = Mutex::new(());
+
+pub struct EspAlloc;
 
 impl EspAlloc {
     pub fn default() -> Self {
-        Self(esp_alloc::ExternalMemory)
+        Self
     }
 }
 
 impl Clone for EspAlloc {
     fn clone(&self) -> Self {
-        EspAlloc(esp_alloc::ExternalMemory)
+        Self
     }
 }
 
 unsafe impl Allocator for EspAlloc {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        self.0.allocate(layout)
+        // esp_println::println!("--------------------------");
+        // esp_println::println!("layout = {:?}", layout);
+        // let stats: esp_alloc::HeapStats = esp_alloc::HEAP.stats();
+        // esp_println::println!("{}", stats);
+        // esp_println::println!("--------------------------");
+        GLOBAL_ALLOC_LOCK.lock(|_| {
+            esp_alloc::ExternalMemory.allocate(layout)
+        })
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        unsafe {
-            self.0.deallocate(ptr, layout)
-        }
+        let _ = GLOBAL_ALLOC_LOCK.lock(|_| {
+            unsafe {
+                esp_alloc::ExternalMemory.deallocate(ptr, layout)
+            }
+        });
     }
 }
 
-pub type BlkDev<S, D> = FsBlockDevice<S, D>;
-pub type ExtAlloc = EspAlloc;
-pub type FMan<S, D> = FileManager<BlkDev<S, D>, TimeSrc, 4, 4, 1>;
-pub type FsError = embedded_sdmmc::SdCardError;
-
 pub type ConcreteSpi<'a> = ExclusiveDevice<Spi<'a, Blocking>, Output<'a>, Delay>;
 pub type ConcreteDelay = Delay;
+pub type FsBlockDevice = SdCard<ConcreteSpi<'static>, ConcreteDelay>;
 
-pub struct SyncFMan<'a>(pub FMan<ConcreteSpi<'a>, ConcreteDelay>);
-unsafe impl <'a> Send for SyncFMan<'a> {}
-unsafe impl <'a> Sync for SyncFMan<'a> {}
+pub type BlkDev = FsBlockDevice;
+pub type ExtAlloc = EspAlloc;
+pub type FMan = FileManager;
+pub type FsError = embedded_sdmmc::SdCardError;
+
+pub struct SyncFMan(pub FMan);
+unsafe impl Send for SyncFMan {}
+unsafe impl Sync for SyncFMan {}
 
 pub static FILE_MAN: OnceLock<SyncFMan> = OnceLock::new();
 
-pub fn init_file_manager(block_device: BlkDev<ConcreteSpi<'static>, ConcreteDelay>, time_src: DummyTimesource)
+pub fn init_file_manager(block_device: BlkDev, time_src: DummyTimesource)
 {
     let _ = FILE_MAN.init(SyncFMan(FileManager::new(block_device, time_src)));
 }
 
-pub async fn get_file_manager() -> &'static FMan<ConcreteSpi<'static>, ConcreteDelay> {
+pub async fn get_file_manager() -> &'static FMan {
     &FILE_MAN.get().await.0
 }
 
@@ -88,9 +102,9 @@ impl From<FManError<SdCardError>> for InitError {
     }
 }
 
-pub async fn init_file_system(spi_device: ConcreteSpi<'static>, delay: ConcreteDelay, allocator: ExtAlloc) -> Result<(), InitError>
+pub async fn init_file_system(spi_device: ConcreteSpi<'static>, delay: ConcreteDelay) -> Result<(), InitError>
 where 
-    embedded_sdmmc::Error<<FsBlockDevice<ConcreteSpi<'static>, ConcreteDelay> as BlockDevice>::Error>: Into<embedded_sdmmc::Error<FsError>>
+    embedded_sdmmc::Error<<FsBlockDevice as BlockDevice>::Error>: Into<embedded_sdmmc::Error<FsError>>
 {
     let sdcard = BlkDev::new(spi_device, delay);
     init_file_manager(sdcard, DummyTimesource);
@@ -98,8 +112,7 @@ where
     let fman = get_file_manager().await;
 
     fman.with_vol_man(|vm, vol| {
-        let root_dir = FileManager::<FsBlockDevice<ConcreteSpi<'static>, ConcreteDelay>, DummyTimesource, 4, 4, 1>
-                                  ::root_dir(vm, vol)?
+        let root_dir = FileManager::root_dir(vm, vol)?
                                   .to_directory(vm);
         let _ = root_dir.make_dir_in_dir(consts::DB_DIR).or_else(|e| {
             if matches!(e, embedded_sdmmc::Error::DirAlreadyExists) {
@@ -128,7 +141,7 @@ where
         {
             let db_dir = root_dir.open_dir(consts::DB_DIR)?.to_raw_directory();
             let stuff_dir = DbDirSdmmc::new(db_dir);
-            let mut db = Database::new_init(VM::new(vm), stuff_dir, allocator.clone())?;
+            let mut db = Database::new_init(VM::new(vm), stuff_dir, ExtAlloc::default())?;
             println!("db init success");
 
             {
@@ -137,7 +150,7 @@ where
                 db.new_table_begin(consts::COUNT_TRACKER_TABLE);
                 db.add_column(name)?;
                 db.add_column(count)?;
-                let _ = db.create_table(allocator.clone()).or_else(|e| {
+                let _ = db.create_table(ExtAlloc::default()).or_else(|e| {
                     if matches!(e, alpa::db::Error::DuplicateKey) {
                         Ok(0)
                     } else {
@@ -148,6 +161,9 @@ where
 
             println!("count_tracker done");
 
+            let stats: esp_alloc::HeapStats = esp_alloc::HEAP.stats();
+            println!("{}", stats);
+
             {
                 let name = Column::new("path", ColumnType::Chars).primary();
                 let count = Column::new("name", ColumnType::Chars);
@@ -156,7 +172,7 @@ where
                 db.add_column(name)?;
                 db.add_column(count)?;
                 db.add_column(size)?;
-                let _ = db.create_table(allocator.clone()).or_else(|e| {
+                let _ = db.create_table(ExtAlloc::default()).or_else(|e| {
                     if matches!(e, alpa::db::Error::DuplicateKey) {
                         Ok(0)
                     } else {
@@ -173,7 +189,7 @@ where
                 db.new_table_begin(consts::MUSIC_TABLE);
                 db.add_column(name)?;
                 db.add_column(count)?;
-                let _ = db.create_table(allocator.clone()).or_else(|e| {
+                let _ = db.create_table(ExtAlloc::default()).or_else(|e| {
                     if matches!(e, alpa::db::Error::DuplicateKey) {
                         Ok(0)
                     } else {
@@ -183,13 +199,13 @@ where
             }
             println!("music table done");
 
-            let count_tracker = db.get_table(consts::COUNT_TRACKER_TABLE, allocator.clone())?;
+            let count_tracker = db.get_table(consts::COUNT_TRACKER_TABLE, ExtAlloc::default())?;
 
             {
-                let mut row = Row::new_in(allocator.clone());
+                let mut row = Row::new_in(ExtAlloc::default());
                 row.push(Value::Chars(consts::FILES_TABLE.as_bytes()));
                 row.push(Value::Int(1));
-                let _ = db.insert_to_table(count_tracker, row, allocator.clone()).or_else(|e| {
+                let _ = db.insert_to_table(count_tracker, row, ExtAlloc::default()).or_else(|e| {
                     if matches!(e, alpa::db::Error::DuplicateKey) {
                         Ok(())
                     } else {
@@ -201,10 +217,10 @@ where
             println!("insert files_table to count_tracker table done");
 
             {
-                let mut row = Row::new_in(allocator.clone());
+                let mut row = Row::new_in(ExtAlloc::default());
                 row.push(Value::Chars(consts::MUSIC_TABLE.as_bytes()));
                 row.push(Value::Int(1));
-                let _ = db.insert_to_table(count_tracker, row, allocator.clone()).or_else(|e| {
+                let _ = db.insert_to_table(count_tracker, row, ExtAlloc::default()).or_else(|e| {
                     if matches!(e, alpa::db::Error::DuplicateKey) {
                         Ok(())
                     } else {
