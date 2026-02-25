@@ -9,7 +9,6 @@ mod router;
 mod dhcp;
 
 use esp_backtrace as _;
-use types::{String};
 use esp_println::{println};
 use esp_rtos::main;
 use embassy_executor::Spawner;
@@ -34,16 +33,6 @@ use allocator_api2::boxed::Box;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
-#[embassy_executor::task(pool_size = 1)]
-async fn second_core_main() {
-    let stats: esp_alloc::HeapStats = esp_alloc::HEAP.stats();
-    println!("{}", stats);
-
-    server::chunks::task_file_uploader().await;
-    loop {
-    }
-}
-
 #[main]
 async fn main(spawner: Spawner) {
     esp_println::logger::init_logger_from_env();
@@ -55,29 +44,8 @@ async fn main(spawner: Spawner) {
     esp_alloc::psram_allocator!(peripherals.PSRAM, esp_hal::psram);
 
     let timg0 = esp_hal::timer::timg::TimerGroup::new(peripherals.TIMG0);
-    let sw = esp_hal::interrupt::software::SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
-
-    static CORE1_STACK: StaticCell<Stack<{8 * 1024}>> = StaticCell::new();
-    let stack = CORE1_STACK.init(Stack::new());
 
     esp_rtos::start(timg0.timer0);
-
-    server::chunks::init().await;
-
-    esp_rtos::start_second_core(
-        peripherals.CPU_CTRL,
-        sw.software_interrupt0,
-        sw.software_interrupt1,
-        stack,
-        || {
-            static EXECUTOR: StaticCell<esp_rtos::embassy::Executor> = StaticCell::new();
-            let core1_executor = EXECUTOR.init(esp_rtos::embassy::Executor::new());
-
-            core1_executor.run(|spawner| {
-                spawner.spawn(second_core_main()).unwrap();
-            });
-        },
-    );
 
     embassy_time::Timer::after_secs(1).await;
 
@@ -189,7 +157,7 @@ async fn main(spawner: Spawner) {
         // CS
 
         loop {
-            let mut spi = Spi::new(
+            let spi = Spi::new(
                 unsafe { peripherals.SPI2.clone_unchecked() },
                 Config::default()
                     .with_frequency(Rate::from_mhz(5))

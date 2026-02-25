@@ -14,9 +14,9 @@ pub async fn http_server_task(
     let (rx_buf, tx_buf, http_buf) = static_resources.init(([0; 2048], [0; 2048], [0; 2048]));
     let app = Box::new_in(router::router(), esp_alloc::InternalMemory);
     let config = picoserve::Config::new(picoserve::Timeouts {
-        start_read_request: Some(Duration::from_secs(5)),
-        persistent_start_read_request: Some(Duration::from_secs(1)),
-        read_request: Some(Duration::from_secs(5)),
+        start_read_request: Some(Duration::from_secs(2)),
+        persistent_start_read_request: Some(Duration::from_secs(5)),
+        read_request: Some(Duration::from_secs(15)),
         write: Some(Duration::from_secs(5)),
     });
 
@@ -24,7 +24,7 @@ pub async fn http_server_task(
 
     loop {
         let mut socket = TcpSocket::new(stack, rx_buf, tx_buf);
-        socket.set_timeout(Some(Duration::from_secs(10)));
+        socket.set_timeout(Some(Duration::from_secs(5)));
 
         if let Ok(_) = embassy_time::with_timeout(Duration::from_secs(20), socket.accept(80)).await {
             let _ = embassy_time::with_timeout(

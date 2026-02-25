@@ -93,33 +93,65 @@ async function uploadFile(btn) {
 		const CHUNK_SIZE = 16 * 1024;
 		const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
+		const parts = file.name.split('.');
 		const name = encodeURIComponent(file.name);
 		const size = encodeURIComponent(file.size);
+		let ext = "bin";
 
-		const initResponse = await fetch(`/music/upload-new?name=${name}&size=${size}`, {
+		if(parts.length > 1) {
+			ext = parts.pop();
+		}
+
+		const initResponse = await fetch(`/music/upload-new?name=${name}&size=${size}&ext=${ext}`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" }
 		});
+		let data = (await initResponse.text()).trim();
+		if (!initResponse.ok) {
+			throw new Error(data);
+		}
 
-		if (!initResponse.ok) throw new Error("Failed to initialize upload");
-
-		const serverFileName = await initResponse.text();
+		let serverFileName = data.slice(1, -1);
+		let prefix = "success: ";
+		
+		if(serverFileName.startsWith(prefix)) {
+			serverFileName = serverFileName.slice(prefix.length);
+		} else {
+			alert(data);
+			throw new Error(data);
+		}
 
 		for (let i = 0; i < totalChunks; i++) {
-			const start = i * CHUNK_SIZE;
-			const end = Math.min(start + CHUNK_SIZE, file.size);
-			const chunk = file.slice(start, end);
+			for(let j = 0; j < 5; j++) {
+				const start = i * CHUNK_SIZE;
+				const end = Math.min(start + CHUNK_SIZE, file.size);
+				const chunk = file.slice(start, end);
 
-			btn.innerText = `Uploading chunk ${i + 1}/${totalChunks}`;
+				btn.innerText = `Uploading chunk ${i + 1}/${totalChunks}`;
 
-			const id = encodeURIComponent(serverFileName);
-			const chunkResponse = await fetch(`/music/upload-chunk?id=${id}&idx=${i}`, {
-				method: "POST",
-				body: chunk
-			});
+				let text;
+				try {
+					const id = encodeURIComponent(serverFileName);
+					const chunkResponse = await fetch(`/music/upload-chunk?id=${id}&idx=${i}`, {
+						method: "POST",
+						body: chunk,
+					});
 
-			if (!chunkResponse.ok) {
-				throw new Error(`Upload failed at chunk ${i}`);
+					if (!chunkResponse.ok) {
+						continue;
+					}
+					text = (await chunkResponse.text()).trim();
+				} catch {
+					continue;
+				}
+
+				text = text.slice(1, -1);
+
+				if(Number(text) !== chunk.size) {
+					throw new Error(`Length doesn't match: expected "${chunk.size}" found "${text.trim()}"`)
+				}
+
+				break;
 			}
 		}
 
@@ -129,19 +161,14 @@ async function uploadFile(btn) {
 			method: "POST",
 			headers: { "Connection": "close" }
 		});
-
-		if (endResponse.ok) {
-			alert("Upload successful!");
-			window.location.reload();
-		} else {
-			throw new Error("Failed to finalize upload");
-		}
+		const resData = await endResponse.text();
+		alert(resData);
 	} catch (e) {
 		console.error(e);
 		alert(`Error: ${e.message}`);
-		btn.disabled = false;
-		btn.innerText = "Upload";
 	}
+
+	window.location.reload();
 }
 
 </script>

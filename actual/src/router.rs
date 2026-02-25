@@ -70,18 +70,6 @@ async fn config() -> impl IntoResponse {
     Response::ok(CONFIG_PAGE).with_header("Content-Type", "text/html")
 }
 
-fn files_routes() -> Router<impl PathRouter> {
-    Router::new()
-        .route("/list", get(server::handle_files))
-        .route(("/delete", parse_path_segment::<String>()), delete(server::handle_delete_file))
-}
-
-fn upload_routes() -> Router<impl PathRouter> {
-    Router::new()
-        .route("/file", post(server::handle_file_upload))
-        .route("/music", post(server::handle_music_upload))
-}
-
 pub fn router() -> Router<impl PathRouter> {
     Router::new()
         .route("/", get(home))
@@ -95,11 +83,17 @@ pub fn router() -> Router<impl PathRouter> {
         .route("/get-flash-data", get(get_flash_data))
         .route("/print-alloc", get(print_alloc))
 
-        .route(("/download", CatchAll), get(server::handle_download))
+        .nest("/music", Router::new()
+            .route("/list", get(server::handle_music_list))
+            .route(("/delete", parse_path_segment::<String>()), delete(server::delete::handle_delete_music))
+            // .route(("/info", parse_path_segment::<String>()), get(server::handle_music_info))
+            // .route(("/data", parse_path_segment::<String>()), get(server::handle_music_data))
+            .route("/upload-new", post(server::upload::new))
+            .route("/upload-chunk", post(server::upload::chunk))
+            .route("/upload-end", post(server::upload::end))
+        )
+        .route("/db", delete(server::delete::handle_delete_db))
         .route(("/fs", CatchAll), get(server::handle_fs))
-        .route("/db", delete(server::handle_delete_db))
-        .route(("/fs-delete", parse_path_segment::<String>()), delete(server::handle_fs_file_delete))
-        .nest("/files", files_routes())
-        .nest("/upload", upload_routes())
+        .route(("/fs-music-delete", parse_path_segment::<String>()), delete(server::delete::handle_fs_music_delete))
 }
 

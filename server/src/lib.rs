@@ -16,14 +16,7 @@ pub(crate) mod internal_prelude {
 use internal_prelude::*;
 use alloc::format;
 
-#[cfg(feature = "std-mode")]
-mod tokio_impl;
-
-#[cfg(feature = "embassy-mode")]
-mod embassy_impl;
-
-pub mod file_uploader;
-pub mod chunks;
+pub mod chunk_receiver;
 pub mod delete;
 pub mod upload;
 mod fs;
@@ -189,24 +182,6 @@ impl Chunks for MusicIterChunks {
             chunk_writer.finalize().await
         }
     }
-}
-
-pub struct MusicUploader;
-
-impl<'r, State> FromRequest<'r, State> for MusicUploader {
-    type Rejection = &'static str;
-
-    async fn from_request<R: Read>(
-        _state: &'r State,
-        parts: RequestParts<'r>,
-        body: RequestBody<'r, R>,
-    ) -> Result<Self, Self::Rejection> {
-        file_uploader::upload_file_to_dir(parts, body, consts::MUSIC_DIR, consts::MUSIC_TABLE).await.map(|_| Self)
-    }
-}
-
-pub async fn handle_music_upload(_: MusicUploader) -> impl IntoResponse {
-    "success"
 }
 
 pub async fn handle_fs(path: String) -> impl IntoResponse {

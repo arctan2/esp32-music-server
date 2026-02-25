@@ -1,6 +1,5 @@
 #![allow(nonstandard_style)]
 use alpa::embedded_sdmmc_ram_device::{allocators};
-use picoserve::time::Duration;
 use picoserve::routing::{post, get, delete, parse_path_segment, Router, PathRouter};
 use picoserve::response::{Response, IntoResponse};
 use file_manager::{init_file_manager, DummyTimesource};
@@ -30,10 +29,6 @@ async fn main() {
                     }
                 }
             }
-
-            server::chunks::init().await;
-
-            tokio::task::spawn_local(server::chunks::task_file_uploader());
 
             loop {
                 let (stream, remote_address) = listener.accept().await.unwrap();

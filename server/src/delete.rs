@@ -12,14 +12,14 @@ impl AsyncRootFn<&'static str> for DeleteMusicAsync {
         async move {
             let root_dir = root_dir.to_directory(vm);
             let db_dir = root_dir.open_dir(consts::DB_DIR).map_err(FManError::SdErr)?.to_raw_directory();
-            let files_dir = root_dir.open_dir(consts::FILES_DIR).map_err(FManError::SdErr)?;
+            let music_dir = root_dir.open_dir(consts::MUSIC_DIR).map_err(FManError::SdErr)?;
 
             let vm = VM::new(vm);
             let mut db = Database::new_init(vm, DbDirSdmmc::new(db_dir), ExtAlloc::default()).map_err(FManError::DbErr)?;
         
             let files_table = db.get_table(consts::MUSIC_TABLE, ExtAlloc::default()).map_err(FManError::DbErr)?;
 
-            match files_dir.delete_file_in_dir(self.name.as_str()) {
+            match music_dir.delete_file_in_dir(self.name.as_str()) {
                 Err(embedded_sdmmc::Error::NotFound) => (),
                 Err(e) => return Err(FManError::SdErr(e)),
                 Ok(()) => ()
@@ -79,7 +79,7 @@ pub async fn handle_delete_music(name: String) -> impl IntoResponse {
         .map_err(|e| picoserve::response::DebugValue(e))
 }
 
-pub async fn handle_fs_file_delete(name: String) -> impl IntoResponse {
+pub async fn handle_fs_music_delete(name: String) -> impl IntoResponse {
     #[cfg(feature = "embassy-mode")]
     let fman = get_file_manager().await;
     #[cfg(feature = "std-mode")]
@@ -87,7 +87,7 @@ pub async fn handle_fs_file_delete(name: String) -> impl IntoResponse {
 
     fman.with_root_dir(move |root_dir, vm| {
         let root_dir = root_dir.to_directory(vm);
-        let files_dir = root_dir.open_dir(consts::FILES_DIR).map_err(FManError::SdErr)?;
+        let files_dir = root_dir.open_dir(consts::MUSIC_DIR).map_err(FManError::SdErr)?;
 
         match files_dir.delete_file_in_dir(name.as_str()) {
             Err(embedded_sdmmc::Error::NotFound) => (),

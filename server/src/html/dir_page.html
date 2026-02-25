@@ -33,8 +33,39 @@ a{
 <script>
 const aTags = document.querySelectorAll("a");
 
+async function deleteFile(name) {
+	const response = await fetch(`/fs-music-delete/${name}`, {
+		method: "DELETE"
+	});
+
+	const data = await response.text();
+
+	if(data === "success") {
+		alert("deleted successfully!");
+	} else {
+		alert(`error: ${data}`);
+	}
+	window.location.reload();
+}
+
 for(const a of aTags) {
+
 	const isDir = a.innerText[a.innerText.length - 1] === "/";
+
+	if(!isDir) {
+		let parent = a.parentElement;
+		let deleteBtn = document.createElement("button");
+		let origin = window.location.origin;
+
+		deleteBtn.style.marginLeft = "1rem";
+		deleteBtn.innerText = "delete";
+		deleteBtn.addEventListener("click", () => {
+			deleteBtn.disabled = true;
+			deleteFile(a.innerText);
+		});
+		parent.appendChild(deleteBtn);
+	}
+
 	let loc = window.location.href;
 	if(!loc.endsWith("/")) loc += "/";
 	a.href = loc + a.innerText;
