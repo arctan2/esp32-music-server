@@ -79,49 +79,7 @@ async fn main(spawner: Spawner) {
         },
     );
 
-    embassy_time::Timer::after_secs(5).await;
-
-    {
-        let miso = peripherals.GPIO32;
-        // GND
-        let sck  = peripherals.GPIO13;
-        // VDD
-        // GND
-        let mosi = peripherals.GPIO14;
-        // CS
-
-        loop {
-            let mut spi = Spi::new(
-                unsafe { peripherals.SPI2.clone_unchecked() },
-                Config::default()
-                    .with_frequency(Rate::from_mhz(5))
-                    .with_mode(Mode::_0),
-            )
-            .unwrap()
-            .with_sck(unsafe { sck.clone_unchecked() })
-            .with_mosi(unsafe { mosi.clone_unchecked() })
-            .with_miso(unsafe { miso.clone_unchecked() });
-
-            let mut cs = Output::new(unsafe { peripherals.GPIO33.clone_unchecked() }, Level::High, OutputConfig::default());
-
-            cs.set_high();
-
-            // for _ in 0..100 {
-            //     let _ = spi.write(&[0xFF]);
-            // }
-
-            let delay = Delay::new();
-            let spi_device = ExclusiveDevice::new(spi, cs, delay).unwrap();
-
-            match init_file_system(spi_device, delay).await {
-                Ok(()) => break,
-                Err(e) => {
-                    embassy_time::Timer::after_secs(1).await;
-                    println!("error: {:?}", e);
-                }
-            }
-        }
-    }
+    embassy_time::Timer::after_secs(1).await;
 
     let config_mgr = StaConfigManager::new(peripherals.FLASH);
     let config_bus = CONFIG_MANAGER.init(Mutex::new(config_mgr));
@@ -156,7 +114,7 @@ async fn main(spawner: Spawner) {
     }
 
     // static AP_RESOURCES: StaticCell<StackResources<5>> = StaticCell::new();
-    static STA_RESOURCES: StaticCell<StackResources<4>> = StaticCell::new();
+    static STA_RESOURCES: StaticCell<StackResources<5>> = StaticCell::new();
 
     // let ap_net_config = embassy_net::Config::ipv4_static(StaticConfigV4 {
     //     address: Ipv4Cidr::new(Ipv4Address::new(10, 0, 1, 1), 24),
@@ -201,7 +159,7 @@ async fn main(spawner: Spawner) {
     // println!("dhcp_server_task spawned...");
 
     // static AP_SOCKET_RESOURCES: StaticCell<([u8; 1024], [u8; 1024], [u8; 2048])> = StaticCell::new();
-    static STA_SOCKET_RESOURCES: StaticCell<([u8; 1024], [u8; 1024], [u8; 2048])> = StaticCell::new();
+    static STA_SOCKET_RESOURCES: StaticCell<([u8; 2048], [u8; 2048], [u8; 2048])> = StaticCell::new();
 
     // spawner.spawn(http_task::http_server_task(ap_stack, &AP_SOCKET_RESOURCES)).unwrap();
     // println!("ap_http_server_task spawned...");
@@ -221,6 +179,47 @@ async fn main(spawner: Spawner) {
     let stats: esp_alloc::HeapStats = esp_alloc::HEAP.stats();
     println!("{}", stats);
 
+    {
+        let miso = peripherals.GPIO32;
+        // GND
+        let sck  = peripherals.GPIO13;
+        // VDD
+        // GND
+        let mosi = peripherals.GPIO14;
+        // CS
+
+        loop {
+            let mut spi = Spi::new(
+                unsafe { peripherals.SPI2.clone_unchecked() },
+                Config::default()
+                    .with_frequency(Rate::from_mhz(5))
+                    .with_mode(Mode::_0),
+            )
+            .unwrap()
+            .with_sck(unsafe { sck.clone_unchecked() })
+            .with_mosi(unsafe { mosi.clone_unchecked() })
+            .with_miso(unsafe { miso.clone_unchecked() });
+
+            let mut cs = Output::new(unsafe { peripherals.GPIO33.clone_unchecked() }, Level::High, OutputConfig::default());
+
+            cs.set_high();
+
+            // for _ in 0..100 {
+            //     let _ = spi.write(&[0xFF]);
+            // }
+
+            let delay = Delay::new();
+            let spi_device = ExclusiveDevice::new(spi, cs, delay).unwrap();
+
+            match init_file_system(spi_device, delay).await {
+                Ok(()) => break,
+                Err(e) => {
+                    embassy_time::Timer::after_secs(1).await;
+                    println!("error: {:?}", e);
+                }
+            }
+        }
+    }
 
     loop {
         println!("tick {tick}");

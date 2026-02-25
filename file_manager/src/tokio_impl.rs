@@ -151,9 +151,11 @@ where
             {
                 let name = Column::new("path", ColumnType::Chars).primary();
                 let count = Column::new("name", ColumnType::Chars);
+                let size = Column::new("size", ColumnType::Int);
                 db.new_table_begin(consts::MUSIC_TABLE);
                 db.add_column(name)?;
                 db.add_column(count)?;
+                db.add_column(size)?;
                 let _ = db.create_table(ExtAlloc::default())?;
             }
 

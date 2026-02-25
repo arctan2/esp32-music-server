@@ -77,6 +77,14 @@ impl<T, const N: usize> Channel<T, N> {
     pub async fn is_empty(&self) -> bool {
         self.ch.is_empty()
     }
+
+    pub async fn is_full(&self) -> bool {
+        self.ch.len() == self.ch.capacity()
+    }
+
+    pub async fn len(&self) -> usize {
+        self.ch.len()
+    }
 }
 
 pub struct Signal<T> {
@@ -96,7 +104,7 @@ impl<T> Signal<T> {
         self.sig.signal(v)
     }
 
-    pub fn reset(&self) {
+    pub async fn reset(&self) {
         if self.sig.signaled() {
             self.sig.reset();
         }

@@ -1,0 +1,147 @@
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+*{
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+html {
+	background-color: black;
+	color: white;
+	font-family: monospace;
+}
+
+body{
+	padding: 1rem;
+}
+
+a{
+	font-size: 1rem;
+	display: inline-block;
+	text-decoration: none;
+}
+
+.size{
+	display: inline-block;
+	margin-right: 0.5rem;
+	color: yellow;
+}
+
+button:disabled{
+	background-color: black;
+	color: white;
+}
+
+button{
+	margin-top: 0.5rem;
+}
+
+</style>
+
+<input type="file" id="upload" />
+<div>
+	<button onclick="uploadFile(this)">upload file</button>
+</div>
+
+<script>
+const aTags = document.querySelectorAll("a");
+
+async function deleteFile(name) {
+	const response = await fetch(`/music/delete/${name}`, {
+		method: "DELETE",
+	});
+
+	const data = await response.text();
+
+	if(data === "success") {
+		alert("deleted successfully!");
+	} else {
+		alert(`error: ${data}`);
+	}
+	window.location.reload();
+}
+
+for(const a of aTags) {
+	let parent = a.parentElement;
+	let deleteBtn = document.createElement("button");
+	let [actualName, name] = a.innerText.split(";");
+	let origin = window.location.origin;
+
+	deleteBtn.style.marginLeft = "1rem";
+	deleteBtn.innerText = "delete";
+	deleteBtn.addEventListener("click", () => {
+		deleteBtn.disabled = true;
+		deleteFile(actualName);
+	});
+	parent.appendChild(deleteBtn);
+
+	a.href = `${origin}/fs/music/${actualName}`;
+	a.innerText = name;
+	a.style.color = "#fff";
+}
+
+async function uploadFile(btn) {
+	try {
+		btn.disabled = true;
+		btn.innerText = "Initializing...";
+
+		const fileInput = document.getElementById("upload");
+		const file = fileInput.files[0];
+		if (!file) return;
+
+		const CHUNK_SIZE = 16 * 1024;
+		const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+		const name = encodeURIComponent(file.name);
+		const size = encodeURIComponent(file.size);
+
+		const initResponse = await fetch(`/music/upload-new?name=${name}&size=${size}`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" }
+		});
+
+		if (!initResponse.ok) throw new Error("Failed to initialize upload");
+
+		const serverFileName = await initResponse.text();
+
+		for (let i = 0; i < totalChunks; i++) {
+			const start = i * CHUNK_SIZE;
+			const end = Math.min(start + CHUNK_SIZE, file.size);
+			const chunk = file.slice(start, end);
+
+			btn.innerText = `Uploading chunk ${i + 1}/${totalChunks}`;
+
+			const id = encodeURIComponent(serverFileName);
+			const chunkResponse = await fetch(`/music/upload-chunk?id=${id}&idx=${i}`, {
+				method: "POST",
+				body: chunk
+			});
+
+			if (!chunkResponse.ok) {
+				throw new Error(`Upload failed at chunk ${i}`);
+			}
+		}
+
+		btn.innerText = "Finalizing...";
+		const id = encodeURIComponent(serverFileName);
+		const endResponse = await fetch(`/music/upload-end?id=${id}`, {
+			method: "POST",
+			headers: { "Connection": "close" }
+		});
+
+		if (endResponse.ok) {
+			alert("Upload successful!");
+			window.location.reload();
+		} else {
+			throw new Error("Failed to finalize upload");
+		}
+	} catch (e) {
+		console.error(e);
+		alert(`Error: ${e.message}`);
+		btn.disabled = false;
+		btn.innerText = "Upload";
+	}
+}
+
+</script>

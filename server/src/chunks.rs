@@ -8,6 +8,7 @@ use alpa::{Value, Row, Query, QueryExecutor};
 use file_manager::{
     get_file_manager,
     ExtAlloc,
+    IntAlloc,
     AsyncRootFn,
     FManError,
     DummyTimesource,
@@ -40,7 +41,7 @@ impl Chunk {
     }
 }
 
-pub const CHAN_CAP: usize = 8;
+pub const CHAN_CAP: usize = 16;
 
 #[derive(Debug)]
 pub enum UploadEvent {
@@ -68,15 +69,25 @@ pub struct UploadRetVal {
     pub file_size: i64
 }
 
+pub async fn wait_event_sig() -> UploadEvent {
+    let sig = get_event_sig().await;
+    sig.wait().await
+}
+
+pub async fn wait_ret_sig() -> Result<(), &'static str> {
+    let sig = get_ret_sig().await;
+    sig.wait().await
+}
+
 pub async fn send_event_sig(msg: UploadEvent) {
     let sig = get_event_sig().await;
-    sig.reset();
+    sig.reset().await;
     sig.signal(msg).await;
 }
 
 pub async fn send_ret_sig(msg: Result<(), &'static str>) {
     let sig = get_ret_sig().await;
-    sig.reset();
+    sig.reset().await;
     sig.signal(msg).await;
 }
 
@@ -137,10 +148,7 @@ pub async fn task_file_uploader() {
 
     loop {
         println!("------------------------------waiting for event--------------------------------------------------");
-        let sig = get_event_sig().await;
-        let event = sig.wait().await;
-        println!("received new event!: {:?}", event);
-        match event {
+        match wait_event_sig().await {
             UploadEvent::NewReq{boundary, filename, lookback_buf, file_ext, table_and_count_tracker_name, file_dir_name} => {
                 send_ret_sig(
                     handle_new_req(file_dir_name, filename, lookback_buf, table_and_count_tracker_name, boundary, file_ext).await
@@ -169,6 +177,7 @@ async fn handle_new_req(
     };
 
     fman.with_root_dir_async(uploader_async).await.map_err(|e| {
+        println!("e = {:?}", e);
         "error while upload_file_to_dir"
     })
 }
@@ -190,18 +199,18 @@ impl AsyncRootFn<()> for FileUploaderAsync {
             let root_dir = root_dir.to_directory(vm);
             let db_dir = root_dir.open_dir(consts::DB_DIR).map_err(|_| "unable to open db dir")?.to_raw_directory();
             let db_dir = DbDirSdmmc::new(db_dir);
-            let mut db = match Database::new_init(VM::new(vm), db_dir, ExtAlloc::default()) {
+            let mut db = match Database::new_init(VM::new(vm), db_dir, IntAlloc::default()) {
                 Ok(d) => d,
                 Err(_) => return Err("db init error".into())
             };
-            let count_tracker_table = db.get_table(consts::COUNT_TRACKER_TABLE, ExtAlloc::default())
+            let count_tracker_table = db.get_table(consts::COUNT_TRACKER_TABLE, IntAlloc::default())
                                         .map_err(|_| "unable to get count_tracker table")?;
-            let files_table = db.get_table(self.table_and_count_tracker_name, ExtAlloc::default())
+            let files_table = db.get_table(self.table_and_count_tracker_name, IntAlloc::default())
                                 .map_err(|_| "unable to get files table")?;
             let cur_file_id: i64;
 
             {
-                let query = Query::<_, &str>::new(count_tracker_table, ExtAlloc::default())
+                let query = Query::<_, &str>::new(count_tracker_table, IntAlloc::default())
                                              .key(Value::Chars(self.table_and_count_tracker_name.as_bytes()));
                 match QueryExecutor::new(
                     query, &mut db.table_buf, &mut db.buf1, &mut db.buf2,
@@ -224,17 +233,13 @@ impl AsyncRootFn<()> for FileUploaderAsync {
                 return Err("id limit reached".into());
             }
 
-            let files_dir = root_dir.open_dir(self.file_dir_name).map_err(|_| "unable to open FILES dir")?;
-
-            let ready_chan = get_ready_chan().await;
-            let free_chan = get_free_chan().await;
+            let files_dir = root_dir.open_dir(self.file_dir_name).map_err(|_| "unable to open dir")?;
 
             send_ret_sig(Ok(())).await;
 
             let mut filename = self.filename;
             let actual_name = format!("{}.{}", cur_file_id, self.file_ext);
             let file_info = fetch_parse_chunks(
-                &ready_chan,
                 files_dir,
                 &mut filename,
                 self.lookback_buf,
@@ -244,18 +249,18 @@ impl AsyncRootFn<()> for FileUploaderAsync {
             ).await?;
 
             {
-                let mut row = Row::new_in(ExtAlloc::default());
+                let mut row = Row::new_in(IntAlloc::default());
                 row.push(Value::Chars(actual_name.as_bytes()));
                 row.push(Value::Chars(&filename[..file_info.filename_len]));
                 row.push(Value::Int(file_info.file_size));
-                db.insert_to_table(files_table, row, ExtAlloc::default()).map_err(|_| "unable to insert to table")?;
+                db.insert_to_table(files_table, row, IntAlloc::default()).map_err(|_| "unable to insert to table")?;
             }
 
             {
-                let mut row = Row::new_in(ExtAlloc::default());
+                let mut row = Row::new_in(IntAlloc::default());
                 row.push(Value::Chars(self.table_and_count_tracker_name.as_bytes()));
                 row.push(Value::Int(cur_file_id + 1));
-                db.update_row(count_tracker_table, Value::Chars(self.table_and_count_tracker_name.as_bytes()), row, ExtAlloc::default())
+                db.update_row(count_tracker_table, Value::Chars(self.table_and_count_tracker_name.as_bytes()), row, IntAlloc::default())
                     .map_err(|_| "unable to update count_tracker_table to table")?;
             }
 
@@ -265,7 +270,6 @@ impl AsyncRootFn<()> for FileUploaderAsync {
 }
 
 async fn fetch_parse_chunks<'a>(
-    ready_chan: &Channel<Box<Chunk, ExtAlloc>, CHAN_CAP>,
     files_dir: Directory<'a, BlkDev, DummyTimesource, 4, 4, 1>,
     filename: &mut Box<[u8; 128], ExtAlloc>,
     mut lookback_buf: Box<[u8; 128], ExtAlloc>,
@@ -274,7 +278,6 @@ async fn fetch_parse_chunks<'a>(
     boundary: Vec<u8, ExtAlloc>,
 ) -> Result<UploadRetVal, &'static str> {
     let new_file = files_dir.open_file_in_dir(actual_name.as_str(), Mode::ReadWriteCreate).map_err(|e| {
-        println!("e = {:?}", e);
         "unable to create file"
     })?;
     let mut filename_len = 0;
@@ -286,13 +289,14 @@ async fn fetch_parse_chunks<'a>(
     let mut file_size: i64 = 0;
     
     let mut is_end_of_upload = false;
+    let ready_chan = get_ready_chan().await;
     let free_chan = get_free_chan().await;
     let mut is_boundary_found = false;
 
     loop {
         if is_end_of_upload {
             while let Some(mut chunk) = ready_chan.try_recv().await {
-                match handle_chunk(
+                let ret = handle_chunk(
                     chunk.as_ref(),
                     &mut step,
                     filename,
@@ -303,15 +307,16 @@ async fn fetch_parse_chunks<'a>(
                     &new_file,
                     &mut file_size,
                     &boundary
-                ) {
+                );
+
+                chunk.reset();
+                free_chan.send(chunk).await;
+
+                match ret {
                     Ok(v) => {
-                        chunk.reset();
-                        free_chan.send(chunk).await;
                         is_boundary_found |= v;
                     },
                     Err(e) => {
-                        chunk.reset();
-                        free_chan.send(chunk).await;
                         new_file.close().map_err(|_| "unable to close file")?;
                         files_dir.delete_file_in_dir(actual_name.as_str()).map_err(|_| "unable to delete file")?;
                         return Err(e);
@@ -332,7 +337,7 @@ async fn fetch_parse_chunks<'a>(
             });
         }
 
-        let fut1 = get_event_sig().await.wait();
+        let fut1 = wait_event_sig();
         let fut2 = ready_chan.recv();
 
         #[cfg(feature = "std-mode")] {
@@ -351,7 +356,7 @@ async fn fetch_parse_chunks<'a>(
                     }
                 },
                 mut chunk = fut2 => {
-                    match handle_chunk(
+                    let ret = handle_chunk(
                         chunk.as_ref(),
                         &mut step,
                         filename,
@@ -362,15 +367,16 @@ async fn fetch_parse_chunks<'a>(
                         &new_file,
                         &mut file_size,
                         &boundary
-                    ) {
+                    );
+
+                    chunk.reset();
+                    free_chan.send(chunk).await;
+
+                    match ret {
                         Ok(v) => {
-                            chunk.reset();
-                            free_chan.send(chunk).await;
                             is_boundary_found |= v;
                         },
                         Err(e) => {
-                            chunk.reset();
-                            free_chan.send(chunk).await;
                             new_file.close().map_err(|_| "unable to close file")?;
                             files_dir.delete_file_in_dir(actual_name.as_str()).map_err(|_| "unable to delete file")?;
                             return Err(e);
@@ -394,7 +400,7 @@ async fn fetch_parse_chunks<'a>(
                     }
                 }
                 Either::Second(mut chunk) => {
-                    match handle_chunk(
+                    let ret = handle_chunk(
                         chunk.as_ref(),
                         &mut step,
                         filename,
@@ -405,15 +411,16 @@ async fn fetch_parse_chunks<'a>(
                         &new_file,
                         &mut file_size,
                         &boundary
-                    ) {
+                    );
+
+                    chunk.reset();
+                    free_chan.send(chunk).await;
+
+                    match ret {
                         Ok(v) => {
-                            chunk.reset();
-                            free_chan.send(chunk).await;
                             is_boundary_found |= v;
                         },
                         Err(e) => {
-                            chunk.reset();
-                            free_chan.send(chunk).await;
                             new_file.close().map_err(|_| "unable to close file")?;
                             files_dir.delete_file_in_dir(actual_name.as_str()).map_err(|_| "unable to delete file")?;
                             return Err(e);

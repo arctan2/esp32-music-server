@@ -16,11 +16,13 @@ edition = "2024"
 allocator-api2 = { version = "0.3", default-features = false, features = ["alloc"] }
 embedded-sdmmc = "0.9.0"
 embassy-sync = { version = "0.7.2", optional = true }
+embassy-time = { version = "0.5.0", optional = true }
 embassy-executor = { version = "0.9.1", features = [], optional = true }
 esp-alloc = { version = "0.9.0", features = ["esp32", "nightly"], optional = true }
 esp-println = { version = "0.16.1", features = ["esp32", "log-04"], optional = true }
 embassy-futures = { version = "0.1.2", optional = true }
 tokio = { version = "1.49.0", optional = true }
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
 
 alpa = { path = "../../../alpa", default-features = false }
 file_manager = { path = "../file_manager" }
@@ -28,17 +30,20 @@ picoserve = { version = "0.17.1", features = ["log", "json"] }
 
 [features]
 std-mode = [
-    "alpa/std", 
+    "alpa/std",
+    "alpa/page_size_1024",
     "file_manager/tokio", 
     "picoserve/tokio",
     "picoserve/ws",
 	"tokio"
 ]
 embassy-mode = [
+    "alpa/page_size_1024",
     "file_manager/embassy",
     "esp-alloc",
     "esp-println",
 	"embassy-executor",
     "embassy-futures",
-	"embassy-sync"
+	"embassy-sync",
+	"embassy-time"
 ]

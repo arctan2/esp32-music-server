@@ -96,6 +96,14 @@ impl<T, const N: usize> Channel<T, N> {
     pub async fn is_empty(&self) -> bool {
         self.inner.is_empty().await
     }
+
+    pub async fn len(&self) -> usize {
+        self.inner.len().await
+    }
+
+    pub async fn is_full(&self) -> bool {
+        self.inner.is_full().await
+    }
 }
 
 #[cfg_attr(feature = "tokio", derive(Debug))]
@@ -116,8 +124,8 @@ impl<T> Signal<T> {
         self.inner.signal(v).await;
     }
 
-    pub fn reset(&self) {
-        self.inner.reset();
+    pub async fn reset(&self) {
+        self.inner.reset().await;
     }
 }
 

@@ -54,13 +54,14 @@ pub async fn upload_file_to_dir<'r, R: Read>(
         chunks::UploadEvent::NewReq{file_dir_name, filename, lookback_buf, table_and_count_tracker_name, boundary, file_ext}
     ).await;
 
-    chunks::get_ret_sig().await.wait().await?;
+    chunks::wait_ret_sig().await?;
 
     let ready_chan = chunks::get_ready_chan().await;
     let free_chan = chunks::get_free_chan().await;
+    let mut size = 0;
 
     loop {
-        let fut1 = chunks::get_ret_sig().await.wait();
+        let fut1 = chunks::wait_ret_sig();
         let fut2 = free_chan.recv();
         #[cfg(feature = "std-mode")] {
             select!(
@@ -74,6 +75,8 @@ pub async fn upload_file_to_dir<'r, R: Read>(
                     match reader.read(&mut chunk.buf).await {
                         Ok(n) => {
                             if n == 0 {
+                                chunk.reset();
+                                free_chan.send(chunk).await;
                                 chunks::send_event_sig(chunks::UploadEvent::EndOfUpload).await;
                                 break;
                             }
@@ -81,6 +84,9 @@ pub async fn upload_file_to_dir<'r, R: Read>(
                             ready_chan.send(chunk).await;
                         }
                         Err(e) => {
+                            println!("error in second = {:?}", e);
+                            chunk.reset();
+                            free_chan.send(chunk).await;
                             chunks::send_event_sig(chunks::UploadEvent::ReadErr).await;
                             break;
                         }
@@ -96,11 +102,11 @@ pub async fn upload_file_to_dir<'r, R: Read>(
                     };
                 }
                 Either::Second(mut chunk) => {
-                    let mut buf = Box::new_in([0; 1024], esp_alloc::InternalMemory);
-                    match reader.read(buf.as_mut()).await {
+                    match reader.read(&mut chunk.buf).await {
                         Ok(n) => {
-                            chunk.buf.copy_from_slice(buf.as_ref());
                             if n == 0 {
+                                chunk.reset();
+                                free_chan.send(chunk).await;
                                 chunks::send_event_sig(chunks::UploadEvent::EndOfUpload).await;
                                 break;
                             }
@@ -109,6 +115,8 @@ pub async fn upload_file_to_dir<'r, R: Read>(
                         }
                         Err(e) => {
                             println!("error in second = {:?}", e);
+                            chunk.reset();
+                            free_chan.send(chunk).await;
                             chunks::send_event_sig(chunks::UploadEvent::ReadErr).await;
                             break;
                         }
@@ -121,3 +129,14 @@ pub async fn upload_file_to_dir<'r, R: Read>(
     chunks::get_ret_sig().await.wait().await
 }
 
+/*
+
+#REQ
+DELETE http://192.168.0.103/fs-delete/1.MP3
+
+#ARGS
+
+#RES
+
+#END
+*/

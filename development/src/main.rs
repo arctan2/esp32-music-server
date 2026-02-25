@@ -17,12 +17,7 @@ async fn main() {
 
     let app = std::rc::Rc::new(router());
 
-    let config = picoserve::Config::new(picoserve::Timeouts {
-        start_read_request: Some(Duration::from_secs(5)),
-        persistent_start_read_request: None,
-        read_request: Some(Duration::from_secs(5)),
-        write: Some(Duration::from_secs(1)),
-    });
+    let config = picoserve::Config::const_default().keep_connection_alive();
 
     tokio::task::LocalSet::new()
         .run_until(async {
@@ -64,25 +59,19 @@ async fn home() -> impl IntoResponse {
         .with_header("Content-Type", "text/html")
 }
 
-fn files_routes() -> Router<impl PathRouter> {
-    Router::new()
-        .route("/list", get(server::handle_files))
-        .route(("/delete", parse_path_segment::<String>()), delete(server::handle_delete_file))
-}
-
-fn upload_routes() -> Router<impl PathRouter> {
-    Router::new()
-        .route("/file", post(server::handle_file_upload))
-        .route("/music", post(server::handle_music_upload))
-}
-
 pub fn router() -> Router<impl PathRouter> {
     Router::new()
         .route("/", get(home))
-        .nest("/files", files_routes())
-        .nest("/upload", upload_routes())
-        .route("/db", delete(server::handle_delete_db))
-        .route(("/download", CatchAll), get(server::handle_download))
+        .nest("/music", Router::new()
+            .route("/list", get(server::handle_music_list))
+            .route(("/delete", parse_path_segment::<String>()), delete(server::delete::handle_delete_music))
+            // .route(("/info", parse_path_segment::<String>()), get(server::handle_music_info))
+            // .route(("/data", parse_path_segment::<String>()), get(server::handle_music_data))
+            .route("/upload-new", post(server::upload::new))
+            .route("/upload-chunk", post(server::upload::chunk))
+            .route("/upload-end", post(server::upload::end))
+        )
+        .route("/db", delete(server::delete::handle_delete_db))
         .route(("/fs", CatchAll), get(server::handle_fs))
 }
 

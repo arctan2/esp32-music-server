@@ -75,6 +75,15 @@ impl<T, const N: usize> Channel<T, N> {
     pub async fn is_empty(&self) -> bool {
         self.rx.lock().await.is_empty()
     }
+
+    pub async fn len(&self) -> usize {
+        self.rx.lock().await.len()
+    }
+
+    pub async fn is_full(&self) -> bool {
+        let rx = self.rx.lock().await;
+        rx.len() == rx.capacity()
+    }
 }
 
 #[derive(Debug)]
@@ -87,7 +96,7 @@ impl<T> Signal<T> {
     pub fn new() -> Self {
         Self {
             notify: Arc::new(Notify::new()),
-            value: tokio::sync::Mutex::new(None),
+            value: TokioMutex::new(None),
         }
     }
 
@@ -101,7 +110,8 @@ impl<T> Signal<T> {
         self.notify.notify_one();
     }
 
-    pub fn reset(&self) {
+    pub async fn reset(&self) {
+        *self.value.lock().await = None;
     }
 }
 

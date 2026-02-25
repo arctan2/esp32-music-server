@@ -33,11 +33,6 @@ impl Clone for ExternalAlloc {
 
 unsafe impl Allocator for ExternalAlloc {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        // esp_println::println!("--------------------------");
-        // esp_println::println!("layout = {:?}", layout);
-        // let stats: esp_alloc::HeapStats = esp_alloc::HEAP.stats();
-        // esp_println::println!("{}", stats);
-        // esp_println::println!("--------------------------");
         GLOBAL_ALLOC_LOCK.lock(|_| {
             esp_alloc::ExternalMemory.allocate(layout)
         })
@@ -166,9 +161,9 @@ where
         println!("created all dirs");
 
         {
-            let db_dir = root_dir.open_dir(consts::DB_DIR)?.to_raw_directory();
-            let stuff_dir = DbDirSdmmc::new(db_dir);
-            let mut db = Database::new_init(VM::new(vm), stuff_dir, ExtAlloc::default())?;
+            let db_dir = DbDirSdmmc::new(root_dir.open_dir(consts::DB_DIR)?.to_raw_directory());
+
+            let mut db = Database::new_init(VM::new(vm), db_dir, ExtAlloc::default())?;
             println!("db init success");
 
             {
