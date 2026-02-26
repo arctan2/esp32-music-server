@@ -65,21 +65,18 @@ async fn home() -> impl IntoResponse {
 pub fn router() -> Router<impl PathRouter> {
     Router::new()
         .route("/", get(home))
-        .nest("/music", Router::new()
-            .route("/list", get(server::handle_music_list))
-            .route(("/delete", parse_path_segment::<String>()), delete(server::delete::handle_delete_music))
-            .route(("/chunk", parse_path_segment::<String>()), get(server::handle_music_chunk))
-        )
+        .route(("/delete", parse_path_segment::<String>(), parse_path_segment::<String>()), delete(server::delete::handle_delete))
+        .route(("/list", parse_path_segment::<String>()), get(server::handle_list))
+        .route(("/chunk", parse_path_segment::<String>(), parse_path_segment::<String>()), get(server::handle_get_chunk))
         .route(("/upload-new", parse_path_segment::<String>()), post(server::upload::new))
         .route(("/upload-chunk", parse_path_segment::<String>()), post(server::upload::chunk))
         .route(("/upload-end", parse_path_segment::<String>()), post(server::upload::end))
         .route("/db", delete(server::delete::handle_delete_db))
-        .route(("/fs", CatchAll), get(server::handle_fs))
+        .route(("/fs", CatchAll), get(server::fs::handle_fs))
 }
 
 
 /*
-
 #REQ
 GET http://192.168.0.103/music/chunk/41.txt?idx=15
 Content-Type: application/json

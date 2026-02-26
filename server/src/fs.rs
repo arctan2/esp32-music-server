@@ -107,3 +107,15 @@ impl <D: BlockDevice> Chunks for FsIterChunks<D> {
     }
 }
 
+pub async fn handle_fs(path: String) -> impl IntoResponse {
+    #[cfg(feature = "embassy-mode")]
+    let fman = get_file_manager().await;
+    #[cfg(feature = "std-mode")]
+    let fman = get_file_manager();
+
+    let file = fman.resolve_path_iter(&path).await;
+
+    ChunkedResponse::new(FsIterChunks::<BlkDev> { 
+        file, fman
+    })
+}

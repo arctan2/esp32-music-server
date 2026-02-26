@@ -20,7 +20,7 @@ pub mod chunk_receiver;
 pub mod delete;
 pub mod upload;
 pub mod statics;
-mod fs;
+pub mod fs;
 
 use alpa::embedded_sdmmc_fs::{DbDirSdmmc, VM};
 use alpa::db::Database;
@@ -49,7 +49,7 @@ use file_manager::{
 };
 
 pub static HOME_PAGE: &str = include_str!("./html/home.html");
-pub static MUSIC_LIST_PAGE: &str = include_str!("./html/music_list.html");
+pub static LIST_PAGE: &str = include_str!("./html/list.html");
 
 #[derive(Copy, Clone, Debug)]
 pub struct CatchAll;
@@ -74,11 +74,12 @@ impl<T: Copy + core::fmt::Debug> PathDescription<T> for CatchAll {
     }
 }
 
-struct HandleMusicListAsync<W: Write> {
+struct HandleListAsync<W: Write> {
     chunk_writer: ChunkWriter<W>,
+    dir_name: String
 }
 
-impl<W> AsyncRootFn<Result<ChunksWritten, W::Error>> for HandleMusicListAsync<W>
+impl<W> AsyncRootFn<Result<ChunksWritten, W::Error>> for HandleListAsync<W>
 where W: Write,
 {
     type Fut<'a> = impl core::future::Future<
@@ -104,7 +105,7 @@ where W: Write,
                     };
                 
 
-                    let files_table = match db.get_table(consts::MUSIC_TABLE, ExtAlloc::default()) {
+                    let files_table = match db.get_table(self.dir_name.as_str(), ExtAlloc::default()) {
                         Ok(t) => t,
                         Err(e) => {
                             if let Err(e) = self.chunk_writer.write_chunk(format!("table not found: {:?}", e).as_bytes()).await {
@@ -143,7 +144,7 @@ where W: Write,
                         };
                     }
 
-                    if let Err(e) = self.chunk_writer.write_chunk(MUSIC_LIST_PAGE.as_bytes()).await {
+                    if let Err(e) = self.chunk_writer.write_chunk(LIST_PAGE.as_bytes()).await {
                         return Ok(Err(e));
                     }
                 },
@@ -158,11 +159,12 @@ where W: Write,
     }
 }
 
-pub struct MusicListState {
-    pub fman: &'static FMan,
+pub struct ListState {
+    fman: &'static FMan,
+    dir_name: String
 }
 
-impl Chunks for MusicListState {
+impl Chunks for ListState {
     fn content_type(&self) -> &'static str {
         "text/html"
     }
@@ -171,8 +173,13 @@ impl Chunks for MusicListState {
         self,
         mut chunk_writer: ChunkWriter<W>,
     ) -> Result<ChunksWritten, W::Error> {
+        if self.dir_name != consts::MUSIC_DIR && self.dir_name != consts::FILES_DIR {
+            chunk_writer.write_chunk(b"invalid dir name").await?;
+            return chunk_writer.finalize().await;
+        }
+
         if self.fman.is_card_active().await {
-            match self.fman.with_root_dir_async(HandleMusicListAsync { chunk_writer }).await {
+            match self.fman.with_root_dir_async(HandleListAsync { chunk_writer, dir_name: self.dir_name }).await {
                 Ok(res) => res,
                 Err(_) => unreachable!()
             }
@@ -183,14 +190,14 @@ impl Chunks for MusicListState {
     }
 }
 
-pub async fn handle_music_list() -> impl IntoResponse {
+pub async fn handle_list(dir_name: String) -> impl IntoResponse {
     #[cfg(feature = "embassy-mode")]
     let fman = get_file_manager().await;
     #[cfg(feature = "std-mode")]
     let fman = get_file_manager();
 
-    ChunkedResponse::new(MusicListState {
-        fman
+    ChunkedResponse::new(ListState {
+        fman, dir_name
     })
 }
 
@@ -273,16 +280,20 @@ pub struct MusicChunkQuery {
     idx: usize
 }
 
-pub async fn handle_music_chunk(id: String, query: picoserve::extract::Query<MusicChunkQuery>) -> impl IntoResponse {
+pub async fn handle_get_chunk((dir_name, id): (String, String), query: picoserve::extract::Query<MusicChunkQuery>) -> impl IntoResponse {
     #[cfg(feature = "embassy-mode")]
     let fman = get_file_manager().await;
     #[cfg(feature = "std-mode")]
     let fman = get_file_manager();
 
-    // fman.with_root_dir(|root_dir, vm| -> Result<impl IntoResponse, FManError<<FsBlockDevice as BlockDevice>::Error>> {
     fman.with_root_dir(move |root_dir, vm| {
         let root_dir = root_dir.to_directory(vm);
-        let music_dir = root_dir.open_dir(consts::MUSIC_DIR)?;
+
+        if dir_name != consts::MUSIC_DIR && dir_name != consts::FILES_DIR {
+            return Err("invalid dir name".into());
+        }
+
+        let music_dir = root_dir.open_dir(dir_name.as_str())?;
         let raw_file = music_dir.open_file_in_dir(id.as_str(), Mode::ReadOnly)?.to_raw_file();
         
         music_dir.close()?;
@@ -293,18 +304,5 @@ pub async fn handle_music_chunk(id: String, query: picoserve::extract::Query<Mus
         }))
     }).await.map_err(|e| {
         picoserve::response::Response::new(StatusCode::INTERNAL_SERVER_ERROR, format!("{:?}", e))
-    })
-}
-
-pub async fn handle_fs(path: String) -> impl IntoResponse {
-    #[cfg(feature = "embassy-mode")]
-    let fman = get_file_manager().await;
-    #[cfg(feature = "std-mode")]
-    let fman = get_file_manager();
-
-    let file = fman.resolve_path_iter(&path).await;
-
-    ChunkedResponse::new(fs::FsIterChunks::<BlkDev> { 
-        file, fman
     })
 }
