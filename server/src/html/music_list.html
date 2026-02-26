@@ -102,7 +102,7 @@ async function uploadFile(btn) {
 			ext = parts.pop();
 		}
 
-		const initResponse = await fetch(`/music/upload-new?name=${name}&size=${size}&ext=${ext}`, {
+		const initResponse = await fetch(`/upload-new/music?name=${name}&size=${size}&ext=${ext}`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" }
 		});
@@ -132,7 +132,7 @@ async function uploadFile(btn) {
 				let text;
 				try {
 					const id = encodeURIComponent(serverFileName);
-					const chunkResponse = await fetch(`/music/upload-chunk?id=${id}&idx=${i}`, {
+					const chunkResponse = await fetch(`/upload-chunk/music?id=${id}&idx=${i}`, {
 						method: "POST",
 						body: chunk,
 					});
@@ -157,7 +157,7 @@ async function uploadFile(btn) {
 
 		btn.innerText = "Finalizing...";
 		const id = encodeURIComponent(serverFileName);
-		const endResponse = await fetch(`/music/upload-end?id=${id}`, {
+		const endResponse = await fetch(`/upload-end/music?id=${id}`, {
 			method: "POST",
 			headers: { "Connection": "close" }
 		});

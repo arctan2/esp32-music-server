@@ -19,17 +19,19 @@ use alloc::format;
 pub mod chunk_receiver;
 pub mod delete;
 pub mod upload;
+pub mod statics;
 mod fs;
 
 use alpa::embedded_sdmmc_fs::{DbDirSdmmc, VM};
 use alpa::db::Database;
 use alpa::{Query, QueryExecutor, Value};
-use embedded_sdmmc::{BlockDevice, RawDirectory, VolumeManager};
+use embedded_sdmmc::{BlockDevice, RawDirectory, VolumeManager, RawFile, Mode};
 use picoserve::routing::{PathDescription};
-use picoserve::response::{IntoResponse};
+use picoserve::response::status::StatusCode;
+use picoserve::response::{IntoResponse, DebugValue};
 use picoserve::request::{RequestBody, RequestParts, Path};
 use picoserve::extract::{FromRequest};
-use picoserve::io::Read;
+use picoserve::io::{Read, Write};
 use allocator_api2::vec::Vec;
 use picoserve::response::chunked::{ChunksWritten, ChunkedResponse, ChunkWriter, Chunks};
 use file_manager::{
@@ -72,12 +74,12 @@ impl<T: Copy + core::fmt::Debug> PathDescription<T> for CatchAll {
     }
 }
 
-struct HandleMusicAsync<W: picoserve::io::Write> {
+struct HandleMusicListAsync<W: Write> {
     chunk_writer: ChunkWriter<W>,
 }
 
-impl<W> AsyncRootFn<Result<ChunksWritten, W::Error>> for HandleMusicAsync<W>
-where W: picoserve::io::Write,
+impl<W> AsyncRootFn<Result<ChunksWritten, W::Error>> for HandleMusicListAsync<W>
+where W: Write,
 {
     type Fut<'a> = impl core::future::Future<
         Output = Result<Result<ChunksWritten, W::Error>, FManError<<FsBlockDevice as BlockDevice>::Error>>>
@@ -156,24 +158,21 @@ where W: picoserve::io::Write,
     }
 }
 
-pub struct MusicIterChunks {
-    #[cfg(feature = "embassy-mode")]
-    pub fman: &'static FMan,
-    #[cfg(feature = "std-mode")]
+pub struct MusicListState {
     pub fman: &'static FMan,
 }
 
-impl Chunks for MusicIterChunks {
+impl Chunks for MusicListState {
     fn content_type(&self) -> &'static str {
         "text/html"
     }
 
-    async fn write_chunks<W: picoserve::io::Write>(
+    async fn write_chunks<W: Write>(
         self,
         mut chunk_writer: ChunkWriter<W>,
     ) -> Result<ChunksWritten, W::Error> {
         if self.fman.is_card_active().await {
-            match self.fman.with_root_dir_async(HandleMusicAsync { chunk_writer }).await {
+            match self.fman.with_root_dir_async(HandleMusicListAsync { chunk_writer }).await {
                 Ok(res) => res,
                 Err(_) => unreachable!()
             }
@@ -184,6 +183,119 @@ impl Chunks for MusicIterChunks {
     }
 }
 
+pub async fn handle_music_list() -> impl IntoResponse {
+    #[cfg(feature = "embassy-mode")]
+    let fman = get_file_manager().await;
+    #[cfg(feature = "std-mode")]
+    let fman = get_file_manager();
+
+    ChunkedResponse::new(MusicListState {
+        fman
+    })
+}
+
+struct HandleMusicGetChunkAsync<W: Write> {
+    chunk_writer: ChunkWriter<W>,
+    raw_file: RawFile,
+    idx: usize
+}
+
+impl<W> AsyncRootFn<Result<ChunksWritten, W::Error>> for HandleMusicGetChunkAsync<W>
+where W: Write,
+{
+    type Fut<'a> = impl core::future::Future<
+        Output = Result<Result<ChunksWritten, W::Error>, FManError<<FsBlockDevice as BlockDevice>::Error>>>
+        + 'a where Self: 'a;
+
+    fn call<'a>(mut self, root_dir: RawDirectory, vm: &'a VolumeManager<BlkDev, DummyTimesource, 4, 4, 1>) -> Self::Fut<'a> {
+        async move {
+            vm.close_dir(root_dir)?;
+
+            let mut buf = statics::get_buf().await;
+            let file = self.raw_file.to_file(vm);
+
+            let offset = self.idx * 16 * 1024;
+            let file_len = file.length() as usize;
+
+            if file_len <= offset {
+                return Ok(self.chunk_writer.finalize().await);
+            }
+
+            file.seek_from_start(offset as u32)?;
+
+            let total_to_send = 16 * 1024;
+            let mut bytes_sent = 0;
+            let remaining_in_file = file_len - offset;
+            let limit = total_to_send.min(remaining_in_file);
+
+            while bytes_sent < limit {
+                let chunk_size = (limit - bytes_sent).min(buf.len());
+                file.read(&mut buf[..chunk_size])?;
+                self.chunk_writer.write_chunk(&buf[..chunk_size]).await.map_err(|_| "unable to write chunk")?;
+                bytes_sent += chunk_size;
+            }
+
+            Ok(self.chunk_writer.finalize().await)
+        }
+    }
+}
+
+pub struct MusicGetChunkState {
+    fman: &'static FMan,
+    raw_file: RawFile,
+    idx: usize
+}
+
+impl Chunks for MusicGetChunkState {
+    fn content_type(&self) -> &'static str {
+        "text/html"
+    }
+
+    async fn write_chunks<W: Write>(self, mut chunk_writer: ChunkWriter<W>) -> Result<ChunksWritten, W::Error> {
+        if self.fman.is_card_active().await {
+            match self.fman.with_root_dir_async(HandleMusicGetChunkAsync {
+                chunk_writer: chunk_writer,
+                raw_file: self.raw_file,
+                idx: self.idx
+            }).await {
+                Ok(res) => res,
+                Err(_) => unreachable!()
+            }
+        } else {
+            chunk_writer.write_chunk(b"SD Card not active").await?;
+            chunk_writer.finalize().await
+        }
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct MusicChunkQuery {
+    idx: usize
+}
+
+pub async fn handle_music_chunk(id: String, query: picoserve::extract::Query<MusicChunkQuery>) -> impl IntoResponse {
+    #[cfg(feature = "embassy-mode")]
+    let fman = get_file_manager().await;
+    #[cfg(feature = "std-mode")]
+    let fman = get_file_manager();
+
+    // fman.with_root_dir(|root_dir, vm| -> Result<impl IntoResponse, FManError<<FsBlockDevice as BlockDevice>::Error>> {
+    fman.with_root_dir(move |root_dir, vm| {
+        let root_dir = root_dir.to_directory(vm);
+        let music_dir = root_dir.open_dir(consts::MUSIC_DIR)?;
+        let raw_file = music_dir.open_file_in_dir(id.as_str(), Mode::ReadOnly)?.to_raw_file();
+        
+        music_dir.close()?;
+        root_dir.close()?;
+
+        Ok(ChunkedResponse::new(MusicGetChunkState {
+            fman, raw_file, idx: query.idx
+        }))
+    }).await.map_err(|e| {
+        picoserve::response::Response::new(StatusCode::INTERNAL_SERVER_ERROR, format!("{:?}", e))
+    })
+}
+
 pub async fn handle_fs(path: String) -> impl IntoResponse {
     #[cfg(feature = "embassy-mode")]
     let fman = get_file_manager().await;
@@ -192,46 +304,7 @@ pub async fn handle_fs(path: String) -> impl IntoResponse {
 
     let file = fman.resolve_path_iter(&path).await;
 
-    #[cfg(feature = "std-mode")] {
-        ChunkedResponse::new(fs::FsIterChunks::<BlkDev> { 
-            file, fman
-        })
-    }
-
-    #[cfg(feature = "embassy-mode")] {
-        ChunkedResponse::new(fs::FsIterChunks::<BlkDev> { 
-            file, fman
-        })
-    }
-}
-
-pub async fn handle_music_list() -> impl IntoResponse {
-    #[cfg(feature = "embassy-mode")]
-    let fman = get_file_manager().await;
-    #[cfg(feature = "std-mode")]
-    let fman = get_file_manager();
-
-    ChunkedResponse::new(MusicIterChunks {
-        fman
+    ChunkedResponse::new(fs::FsIterChunks::<BlkDev> { 
+        file, fman
     })
-}
-
-pub async fn handle_music_info() -> impl IntoResponse {
-    #[cfg(feature = "embassy-mode")]
-    let fman = get_file_manager().await;
-    #[cfg(feature = "std-mode")]
-    let fman = get_file_manager();
-
-    fman.with_root_dir_async(delete::DeleteDbAsync).await
-        .map_err(|e| picoserve::response::DebugValue(e))
-}
-
-pub async fn handle_music_data() -> impl IntoResponse {
-    #[cfg(feature = "embassy-mode")]
-    let fman = get_file_manager().await;
-    #[cfg(feature = "std-mode")]
-    let fman = get_file_manager();
-
-    fman.with_root_dir_async(delete::DeleteDbAsync)
-        .await.map_err(|e| picoserve::response::DebugValue(e))
 }

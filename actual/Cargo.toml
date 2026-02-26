@@ -35,7 +35,7 @@ embassy-sync = { version = "0.7.2" }
 static_cell = { version = "2.1.1", features = ["nightly"] }
 leasehund = { version = "0.2.0" }
 heapless = { version = "0.8.0" }
-picoserve = { version = "0.17.1", features = ["embassy", "ws", "log", "json"] }
+picoserve = { version = "0.17.1", features = ["embassy", "ws", "log", "json", "alloc"] }
 enumset = { version = "1.1.10" }
 serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
 postcard = { version = "1.1.3" }

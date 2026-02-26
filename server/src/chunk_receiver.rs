@@ -20,56 +20,8 @@ pub struct ChunkQuery {
 pub struct HandleChunkAsync<'r, R: Read> {
     query: ChunkQuery,
     body: RequestBody<'r, R>,
-    file_dir_name: &'static str,
+    file_dir_name: &'r str,
 }
-
-#[cfg(feature = "std-mode")]
-mod tokio_impl {
-    use std::sync::OnceLock;
-    use file_manager::{IntAlloc};
-    use file_manager::runtime::{Mutex, MutexGuard};
-    use allocator_api2::boxed::Box;
-
-    pub type Buf = Box<[u8; BUF_SIZE], IntAlloc>;
-    pub const BUF_SIZE: usize = 2048;
-
-    pub static BUF: OnceLock<Mutex<Buf>> = OnceLock::new();
-
-    pub fn init_buf() {
-        BUF.set(Mutex::new(Box::new_in([0u8; BUF_SIZE], IntAlloc::default()))).expect("initing twice BUF");
-    }
-
-    pub async fn get_buf() -> MutexGuard<'static, Buf> {
-        BUF.get().expect("BUF not initialized").lock().await
-    }
-}
-
-#[cfg(feature = "embassy-mode")]
-mod embassy_impl {
-    use embassy_sync::once_lock::OnceLock;
-    use file_manager::{IntAlloc};
-    use file_manager::runtime::{Mutex, MutexGuard};
-    use allocator_api2::boxed::Box;
-
-    pub type Buf = Box<[u8; BUF_SIZE], IntAlloc>;
-    pub const BUF_SIZE: usize = 2048;
-
-    pub static BUF: OnceLock<Mutex<Buf>> = OnceLock::new();
-
-    pub fn init_buf() {
-        let _ = BUF.init(Mutex::new(Box::new_in([0u8; BUF_SIZE], IntAlloc::default())));
-    }
-
-    pub async fn get_buf() -> MutexGuard<'static, Buf> {
-        BUF.get().await.lock().await
-    }
-}
-
-#[cfg(feature = "std-mode")]
-pub use tokio_impl::*;
-
-#[cfg(feature = "embassy-mode")]
-pub use embassy_impl::*;
 
 impl<'r, R> AsyncRootFn<String> for HandleChunkAsync<'r, R>
 where R: Read
@@ -79,7 +31,7 @@ where R: Read
 
     fn call<'a>(self, root_dir: RawDirectory, vm: &'a VolumeManager<BlkDev, DummyTimesource, 4, 4, 1>) -> Self::Fut<'a> {
         async move {
-            let mut buf = get_buf().await;
+            let mut buf = crate::statics::get_buf().await;
             let root_dir = root_dir.to_directory(vm);
 
             let music_dir = root_dir.open_dir(self.file_dir_name)?;
@@ -120,7 +72,7 @@ where R: Read
 pub async fn receive_chunks<'r, R: Read>(
     parts: RequestParts<'r>,
     body: RequestBody<'r, R>,
-    file_dir_name: &'static str,
+    file_dir_name: &'r str,
 ) -> Result<String, DebugValue<String>> {
     #[cfg(feature = "embassy-mode")]
     let fman = get_file_manager().await;

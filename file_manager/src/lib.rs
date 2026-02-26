@@ -189,6 +189,15 @@ impl FileManager {
         Err(FManError::CardNotActive)
     }
 
+    // pub async fn is_music_file_exist(&self, name: &str) -> Result<bool, FManError<<FsBlockDevice as BlockDevice>::Error>> {
+    //     let state = self.state.lock().await;
+    //     if let CardState::Active{ ref vm, ref vol } = state.card_state {
+    //         let root_dir = Self::root_dir(vm, vol)?.to_directory(vm);
+    //         let music_dir = 
+    //     }
+    //     Err(FManError::CardNotActive)
+    // }
+
     pub async fn close_dir<'a>(&self, dir: RawDirectory)
         -> Result<(), FManError<<FsBlockDevice as BlockDevice>::Error>>
     {

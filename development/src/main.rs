@@ -24,7 +24,7 @@ async fn main() {
         write: Some(Duration::from_secs(5)),
     }).keep_connection_alive();
 
-    server::chunk_receiver::init_buf();
+    server::statics::init();
 
     tokio::task::LocalSet::new()
         .run_until(async {
@@ -68,13 +68,25 @@ pub fn router() -> Router<impl PathRouter> {
         .nest("/music", Router::new()
             .route("/list", get(server::handle_music_list))
             .route(("/delete", parse_path_segment::<String>()), delete(server::delete::handle_delete_music))
-            // .route(("/info", parse_path_segment::<String>()), get(server::handle_music_info))
-            // .route(("/data", parse_path_segment::<String>()), get(server::handle_music_data))
-            .route("/upload-new", post(server::upload::new))
-            .route("/upload-chunk", post(server::upload::chunk))
-            .route("/upload-end", post(server::upload::end))
+            .route(("/chunk", parse_path_segment::<String>()), get(server::handle_music_chunk))
         )
+        .route(("/upload-new", parse_path_segment::<String>()), post(server::upload::new))
+        .route(("/upload-chunk", parse_path_segment::<String>()), post(server::upload::chunk))
+        .route(("/upload-end", parse_path_segment::<String>()), post(server::upload::end))
         .route("/db", delete(server::delete::handle_delete_db))
         .route(("/fs", CatchAll), get(server::handle_fs))
 }
 
+
+/*
+
+#REQ
+GET http://192.168.0.103/music/chunk/41.txt?idx=15
+Content-Type: application/json
+
+#ARGS
+-v
+
+#RES
+#END
+*/

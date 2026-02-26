@@ -26,7 +26,7 @@ serde = { version = "1.0", default-features = false, features = ["derive", "allo
 
 alpa = { path = "../../../alpa", default-features = false }
 file_manager = { path = "../file_manager" }
-picoserve = { version = "0.17.1", features = ["log", "json"] }
+picoserve = { version = "0.17.1", features = ["log", "json", "alloc"] }
 
 [features]
 std-mode = [

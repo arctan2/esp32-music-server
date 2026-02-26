@@ -48,7 +48,7 @@ async fn main(spawner: Spawner) {
 
     esp_rtos::start(timg0.timer0);
 
-    server::chunk_receiver::init_buf();
+    server::statics::init();
 
     embassy_time::Timer::after_secs(1).await;
 
