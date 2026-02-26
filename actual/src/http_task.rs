@@ -4,7 +4,6 @@ use embassy_net::Stack;
 use embassy_time::Duration;
 use embassy_net::tcp::TcpSocket;
 use crate::router;
-use allocator_api2::boxed::Box;
 
 #[embassy_executor::task(pool_size = 2)]
 pub async fn http_server_task(

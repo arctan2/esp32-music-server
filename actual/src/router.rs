@@ -83,16 +83,14 @@ pub fn router() -> Router<impl PathRouter> {
         .route("/get-flash-data", get(get_flash_data))
         .route("/print-alloc", get(print_alloc))
 
-        .nest("/music", Router::new()
-            .route("/list", get(server::handle_music_list))
-            .route(("/delete", parse_path_segment::<String>()), delete(server::delete::handle_delete_music))
-            .route(("/chunk", parse_path_segment::<String>()), get(server::handle_music_chunk))
-            .route("/upload-new", post(server::upload::new))
-            .route("/upload-chunk", post(server::upload::chunk))
-            .route("/upload-end", post(server::upload::end))
-        )
+        .route(("/delete", parse_path_segment::<String>(), parse_path_segment::<String>()), delete(server::delete::handle_delete))
+        .route(("/list", parse_path_segment::<String>()), get(server::list::handle_list))
+        .route(("/chunk", parse_path_segment::<String>(), parse_path_segment::<String>()), get(server::chunk::handle_get_chunk))
+        .route(("/upload-new", parse_path_segment::<String>()), post(server::upload::new))
+        .route(("/upload-chunk", parse_path_segment::<String>()), post(server::upload::chunk))
+        .route(("/upload-end", parse_path_segment::<String>()), post(server::upload::end))
         .route("/db", delete(server::delete::handle_delete_db))
-        .route(("/fs", CatchAll), get(server::handle_fs))
+        .route(("/fs", CatchAll), get(server::fs::handle_fs))
         .route(("/fs-music-delete", parse_path_segment::<String>()), delete(server::delete::handle_fs_music_delete))
 }
 

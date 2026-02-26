@@ -3,7 +3,7 @@ use picoserve::response::{IntoResponse};
 use file_manager::{IntAlloc};
 use alpa::{db::Database, Row};
 use embedded_sdmmc::Mode;
-use picoserve::response::{Response, DebugValue, status::StatusCode};
+use picoserve::response::{DebugValue};
 
 #[cfg(feature = "std-mode")]
 use std::println;
@@ -125,7 +125,7 @@ impl<'r, State> FromRequest<'r, State> for MusicReceiver {
             return Err(DebugValue(String::from("invalid dir name")));
         }
 
-        chunk_receiver::receive_chunks(parts, body, last_segment).await.map(|response| Self { response })
+        chunk::receive_chunks(parts, body, last_segment).await.map(|response| Self { response })
     }
 }
 

@@ -62,8 +62,7 @@ impl <D: BlockDevice> Chunks for FsIterChunks<D> {
                                 if ext == b"TXT" {
                                     chunk_writer.write_chunk(b"<pre>").await?;
                                 }
-                                let mut buffer: Vec<u8, ExtAlloc> = Vec::with_capacity_in(1024, ExtAlloc::default());
-                                buffer.resize(buffer.capacity(), 0);
+                                let mut buffer = statics::get_buf2().await;
                                 buffer.fill(0);
                                 loop {
                                     match vm.read(f, buffer.as_mut()) {

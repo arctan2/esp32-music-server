@@ -57,14 +57,14 @@ pub async fn event_handler_task(
                         let sta_config = wifi::ClientConfig::default()
                             .with_ssid(ssid_pwd.ssid)
                             .with_password(ssid_pwd.pwd);
-                        // match controller.set_config(&wifi::ModeConfig::ApSta(sta_config, ap_config.clone())) {
-                        //     Err(e) => println!("error while setting config: {:?}", e),
-                        //     Ok(_) => println!("config set successfully"),
-                        // };
-                        match controller.set_config(&wifi::ModeConfig::Client(sta_config)) {
+                        match controller.set_config(&wifi::ModeConfig::ApSta(sta_config, ap_config.clone())) {
                             Err(e) => println!("error while setting config: {:?}", e),
                             Ok(_) => println!("config set successfully"),
                         };
+                        // match controller.set_config(&wifi::ModeConfig::Client(sta_config)) {
+                        //     Err(e) => println!("error while setting config: {:?}", e),
+                        //     Ok(_) => println!("config set successfully"),
+                        // };
                     }
                     Event::WriteConfigToFlash(ssid_pwd) => {
                         let mut manager = sta_config.lock().await;

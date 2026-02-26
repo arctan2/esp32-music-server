@@ -21,16 +21,14 @@ use sta_config::{StaConfigManager, CONFIG_MANAGER};
 use event_handler::{Event, EVENT_CHAN};
 use embassy_net::icmp::ping::{PingManager, PingParams};
 use embassy_net::icmp::PacketMetadata;
-use file_manager::{ExtAlloc, init_file_system};
+use file_manager::{init_file_system};
 use esp_hal::{
     gpio::{Level, Output, OutputConfig},
     time::{Rate},
     spi::{master::{Spi, Config}, Mode},
     delay::{Delay},
 };
-use esp_hal::system::Stack;
 use embedded_hal_bus::spi::ExclusiveDevice;
-use allocator_api2::boxed::Box;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
