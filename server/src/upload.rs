@@ -4,6 +4,12 @@ use file_manager::{IntAlloc};
 use alpa::{db::Database, Row};
 use embedded_sdmmc::Mode;
 
+#[cfg(feature = "std-mode")]
+use std::println;
+
+#[cfg(feature = "embassy-mode")]
+use esp_println::println;
+
 #[derive(serde::Deserialize)]
 pub struct NewQuery {
     name: String,
@@ -64,7 +70,7 @@ pub async fn new(query: picoserve::extract::Query<NewQuery>) -> impl IntoRespons
         let actual_name = format!("{}.{}", cur_file_id, query.ext);
         let file = music_dir.open_file_in_dir(actual_name.as_str(), Mode::ReadWriteCreate)
                             .map_err(|e| {
-                                esp_println::println!("e = {:?}", e);
+                                println!("e = {:?}", e);
                                 "unable to create new file"
                             })?;
 
@@ -76,7 +82,7 @@ pub async fn new(query: picoserve::extract::Query<NewQuery>) -> impl IntoRespons
             row.push(Value::Chars(&query.name.as_bytes()));
             row.push(Value::Int(query.size as i64));
             db.insert_to_table(music_table, row, IntAlloc::default()).map_err(|e| {
-                esp_println::println!("e = {:?}", e);
+                println!("e = {:?}", e);
                 "unable to insert to table"
             })?;
         }

@@ -12,13 +12,13 @@ pub async fn http_server_task(
     static_resources: &'static StaticCell<([u8; 2048], [u8; 2048], [u8; 2048])>
 ) {
     let (rx_buf, tx_buf, http_buf) = static_resources.init(([0; 2048], [0; 2048], [0; 2048]));
-    let app = Box::new_in(router::router(), esp_alloc::InternalMemory);
+    let app = router::router();
     let config = picoserve::Config::new(picoserve::Timeouts {
         start_read_request: Some(Duration::from_secs(2)),
         persistent_start_read_request: Some(Duration::from_secs(5)),
-        read_request: Some(Duration::from_secs(15)),
+        read_request: Some(Duration::from_secs(10)),
         write: Some(Duration::from_secs(5)),
-    });
+    }).keep_connection_alive();
 
     println!("HTTP Server listening on port 80...");
 
@@ -28,7 +28,7 @@ pub async fn http_server_task(
 
         if let Ok(_) = embassy_time::with_timeout(Duration::from_secs(20), socket.accept(80)).await {
             let _ = embassy_time::with_timeout(
-                Duration::from_secs(5), 
+                Duration::from_secs(10), 
                 picoserve::Server::new(&app, &config, http_buf).serve(socket)
             ).await;
         } else {

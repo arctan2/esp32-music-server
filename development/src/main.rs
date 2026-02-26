@@ -5,6 +5,7 @@ use picoserve::response::{Response, IntoResponse};
 use file_manager::{init_file_manager, DummyTimesource};
 use server::{CatchAll, HOME_PAGE};
 use file_manager::{BlkDev, init_file_system};
+use picoserve::time::Duration;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -16,7 +17,14 @@ async fn main() {
 
     let app = std::rc::Rc::new(router());
 
-    let config = picoserve::Config::const_default().keep_connection_alive();
+    let config = picoserve::Config::new(picoserve::Timeouts {
+        start_read_request: Some(Duration::from_secs(2)),
+        persistent_start_read_request: Some(Duration::from_secs(5)),
+        read_request: Some(Duration::from_secs(10)),
+        write: Some(Duration::from_secs(5)),
+    }).keep_connection_alive();
+
+    server::chunk_receiver::init_buf();
 
     tokio::task::LocalSet::new()
         .run_until(async {

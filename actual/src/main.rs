@@ -47,6 +47,8 @@ async fn main(spawner: Spawner) {
 
     esp_rtos::start(timg0.timer0);
 
+    server::chunk_receiver::init_buf();
+
     embassy_time::Timer::after_secs(1).await;
 
     let config_mgr = StaConfigManager::new(peripherals.FLASH);
