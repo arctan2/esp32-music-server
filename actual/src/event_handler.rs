@@ -35,7 +35,7 @@ pub fn get_wifi_status<'a>(
 #[embassy_executor::task(pool_size = 1)]
 pub async fn event_handler_task(
     mut controller: wifi::WifiController<'static>,
-    // ap_config: wifi::AccessPointConfig,
+    ap_config: wifi::AccessPointConfig,
     sta_config: crate::sta_config::GlobalStaConfigManager,
     stack: embassy_net::Stack<'static>,
 ) {

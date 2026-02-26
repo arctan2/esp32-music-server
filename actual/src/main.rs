@@ -8,6 +8,7 @@ mod event_handler;
 mod router;
 mod dhcp;
 
+use types::String;
 use esp_backtrace as _;
 use esp_println::{println};
 use esp_rtos::main;
@@ -63,11 +64,11 @@ async fn main(spawner: Spawner) {
         wifi::Config::default()
     ).unwrap();
 
-    // let ap_config = wifi::AccessPointConfig::default()
-    //     .with_auth_method(wifi::AuthMethod::Wpa2Personal)
-    //     .with_channel(6)
-    //     .with_ssid(String::from("arctan2-ap"))
-    //     .with_password(String::from("123498765"));
+    let ap_config = wifi::AccessPointConfig::default()
+        .with_auth_method(wifi::AuthMethod::Wpa2Personal)
+        .with_channel(6)
+        .with_ssid(String::from("arctan2-ap"))
+        .with_password(String::from("123498765"));
 
     let mut sta_config = wifi::ClientConfig::default();
      
@@ -83,23 +84,23 @@ async fn main(spawner: Spawner) {
         }
     }
 
-    // static AP_RESOURCES: StaticCell<StackResources<5>> = StaticCell::new();
+    static AP_RESOURCES: StaticCell<StackResources<5>> = StaticCell::new();
     static STA_RESOURCES: StaticCell<StackResources<5>> = StaticCell::new();
 
-    // let ap_net_config = embassy_net::Config::ipv4_static(StaticConfigV4 {
-    //     address: Ipv4Cidr::new(Ipv4Address::new(10, 0, 1, 1), 24),
-    //     gateway: Some(Ipv4Address::new(10, 0, 1, 1)),
-    //     dns_servers: heapless::Vec::new(),
-    // });
+    let ap_net_config = embassy_net::Config::ipv4_static(StaticConfigV4 {
+        address: Ipv4Cidr::new(Ipv4Address::new(10, 0, 1, 1), 24),
+        gateway: Some(Ipv4Address::new(10, 0, 1, 1)),
+        dns_servers: heapless::Vec::new(),
+    });
 
     let sta_net_config = embassy_net::Config::dhcpv4(Default::default());
 
-    // let (ap_stack, ap_runner) = embassy_net::new(
-    //     ifaces.ap,
-    //     ap_net_config,
-    //     AP_RESOURCES.init(StackResources::new()),
-    //     1234,
-    // );
+    let (ap_stack, ap_runner) = embassy_net::new(
+        ifaces.ap,
+        ap_net_config,
+        AP_RESOURCES.init(StackResources::new()),
+        1234,
+    );
 
     let (sta_stack, sta_runner) = embassy_net::new(
         ifaces.sta,
@@ -111,28 +112,28 @@ async fn main(spawner: Spawner) {
     if let Err(e) = wifi_controller.set_power_saving(wifi::PowerSaveMode::None) {
         println!("error while setting power saving: {}", e);
     }
-    // wifi_controller.set_config(&wifi::ModeConfig::ApSta(sta_config, ap_config.clone())).unwrap();
-    wifi_controller.set_config(&wifi::ModeConfig::Client(sta_config)).unwrap();
+    wifi_controller.set_config(&wifi::ModeConfig::ApSta(sta_config, ap_config.clone())).unwrap();
+    // wifi_controller.set_config(&wifi::ModeConfig::Client(sta_config)).unwrap();
     wifi_controller.start_async().await.unwrap();
     println!("wifi started...");
 
-    // spawner.spawn(net_runner_task(ap_runner)).unwrap();
-    // println!("ap_runner spawned...");
+    spawner.spawn(net_runner_task(ap_runner)).unwrap();
+    println!("ap_runner spawned...");
     spawner.spawn(net_runner_task(sta_runner)).unwrap();
     println!("sta_runner spawned...");
 
-    // spawner.spawn(event_handler::event_handler_task(wifi_controller, ap_config, config_bus, sta_stack)).unwrap();
-    spawner.spawn(event_handler::event_handler_task(wifi_controller, config_bus, sta_stack)).unwrap();
+    spawner.spawn(event_handler::event_handler_task(wifi_controller, ap_config, config_bus, sta_stack)).unwrap();
+    // spawner.spawn(event_handler::event_handler_task(wifi_controller, config_bus, sta_stack)).unwrap();
     println!("wifi logger started...");
 
-    // spawner.spawn(dhcp::dhcp_server_task(ap_stack)).unwrap();
-    // println!("dhcp_server_task spawned...");
+    spawner.spawn(dhcp::dhcp_server_task(ap_stack)).unwrap();
+    println!("dhcp_server_task spawned...");
 
-    // static AP_SOCKET_RESOURCES: StaticCell<([u8; 1024], [u8; 1024], [u8; 2048])> = StaticCell::new();
+    static AP_SOCKET_RESOURCES: StaticCell<([u8; 2048], [u8; 2048], [u8; 2048])> = StaticCell::new();
     static STA_SOCKET_RESOURCES: StaticCell<([u8; 2048], [u8; 2048], [u8; 2048])> = StaticCell::new();
 
-    // spawner.spawn(http_task::http_server_task(ap_stack, &AP_SOCKET_RESOURCES)).unwrap();
-    // println!("ap_http_server_task spawned...");
+    spawner.spawn(http_task::http_server_task(ap_stack, &AP_SOCKET_RESOURCES)).unwrap();
+    println!("ap_http_server_task spawned...");
 
     spawner.spawn(http_task::http_server_task(sta_stack, &STA_SOCKET_RESOURCES)).unwrap();
     println!("sta_http_server_task spawned...");
@@ -162,7 +163,7 @@ async fn main(spawner: Spawner) {
             let spi = Spi::new(
                 unsafe { peripherals.SPI2.clone_unchecked() },
                 Config::default()
-                    .with_frequency(Rate::from_mhz(5))
+                    .with_frequency(Rate::from_mhz(6))
                     .with_mode(Mode::_0),
             )
             .unwrap()
