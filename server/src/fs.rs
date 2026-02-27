@@ -51,7 +51,7 @@ impl <D: BlockDevice> Chunks for FsIterChunks<D> {
                                 chunk_writer.write_chunk("<br>".as_bytes()).await?;
                             }
 
-                            chunk_writer.write_chunk(include_str!("./html/dir_page.html").as_bytes()).await?;
+                            chunk_writer.write_chunk(include_str!("./htm/dir_page.htm").as_bytes()).await?;
                         }
                     },
                     FileType::File(ref entry, f) => {
@@ -91,7 +91,7 @@ impl <D: BlockDevice> Chunks for FsIterChunks<D> {
                             }
 
                             if ext != b"HTM" {
-                                chunk_writer.write_chunk(include_str!("./html/file_page.html").as_bytes()).await?;
+                                chunk_writer.write_chunk(include_str!("./htm/file_page.htm").as_bytes()).await?;
                             }
                         }
                     }

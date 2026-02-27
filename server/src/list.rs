@@ -41,13 +41,20 @@ where W: Write,
                         }
                     };
 
+
                     {
+
+                        if let Err(e) = self.chunk_writer.write_chunk(b"<div id=\"list\">").await {
+                            return Ok(Err(e));
+                        }
+
                         let query = Query::<_, &str>::new(files_table, ExtAlloc::default());
                         match QueryExecutor::new(
                             query, &mut db.table_buf, &mut db.buf1, &mut db.buf2,
                             &db.file_handler.page_rw.as_ref().unwrap()
                         ) {
                             Ok(mut exec) => {
+
                                 while let Ok(row) = exec.next() {
                                     let actual_name = unsafe { core::str::from_utf8_unchecked(row[0].to_chars().unwrap()) };
                                     let name = unsafe { core::str::from_utf8_unchecked(row[1].to_chars().unwrap()) };
@@ -61,6 +68,7 @@ where W: Write,
                                         return Ok(Err(e));
                                     }
                                 }
+
                             },
                             Err(_) => {
                                 if let Err(e) = self.chunk_writer.write_chunk(b"<i>table empty</i><br>").await {
@@ -68,6 +76,10 @@ where W: Write,
                                 }
                             }
                         };
+
+                        if let Err(e) = self.chunk_writer.write_chunk(b"</div>").await {
+                            return Ok(Err(e));
+                        }
                     }
 
                     if let Err(e) = self.chunk_writer.write_chunk(LIST_PAGE.as_bytes()).await {
@@ -125,5 +137,9 @@ pub async fn handle_list(dir_name: String) -> impl IntoResponse {
     ChunkedResponse::new(ListState {
         fman, dir_name
     })
+    .into_response()
+    .with_header("Access-Control-Allow-Origin", "*")
+    .with_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    .with_header("Access-Control-Allow-Headers", "*")
 }
 

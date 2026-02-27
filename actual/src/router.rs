@@ -8,7 +8,7 @@ use crate::types::{WifiSsidPwd, WifiStatus};
 use server::{CatchAll, HOME_PAGE};
 use crate::types::String;
 
-static CONFIG_PAGE: &str = include_str!("./html/config.html");
+static CONFIG_PAGE: &str = include_str!("./htm/config.htm");
 static STATUS_SIGNAL: Signal<CriticalSectionRawMutex, WifiStatus> = Signal::new();
 static FLASH_DATA_SIGNAL: Signal<CriticalSectionRawMutex, WifiSsidPwd> = Signal::new();
 

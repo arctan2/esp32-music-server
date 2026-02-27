@@ -13,7 +13,7 @@ async fn main() {
     let sdcard = BlkDev::new("test_file.db").unwrap();
     init_file_manager(sdcard, DummyTimesource);
 
-    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 8000)).await.unwrap();
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, 8000)).await.unwrap();
 
     let app = std::rc::Rc::new(router());
 
@@ -77,9 +77,10 @@ pub fn router() -> Router<impl PathRouter> {
 
 
 /*
-#REQ
 GET http://192.168.0.103/music/chunk/41.txt?idx=15
-Content-Type: application/json
+#REQ
+GET http://localhost:8000/list/music
+Content-Type: text/html
 
 #ARGS
 -v

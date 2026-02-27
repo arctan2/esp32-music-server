@@ -49,8 +49,8 @@ use file_manager::{
     FsBlockDevice
 };
 
-pub static HOME_PAGE: &str = include_str!("./html/home.html");
-pub static LIST_PAGE: &str = include_str!("./html/list.html");
+pub static HOME_PAGE: &str = include_str!("./htm/home.htm");
+pub static LIST_PAGE: &str = include_str!("./htm/list.htm");
 
 #[derive(Copy, Clone, Debug)]
 pub struct CatchAll;
