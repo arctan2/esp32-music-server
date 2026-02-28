@@ -22,6 +22,7 @@ pub mod delete;
 pub mod upload;
 pub mod statics;
 pub mod fs;
+pub mod range;
 
 use alpa::embedded_sdmmc_fs::{DbDirSdmmc, VM};
 use alpa::db::Database;

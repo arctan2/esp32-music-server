@@ -1,8 +1,9 @@
 use embedded_sdmmc::{Mode};
 use alloc::format;
 use super::*;
-use picoserve::response::DebugValue;
+use picoserve::response::{Response, DebugValue};
 
+#[allow(unused)]
 #[cfg(feature = "std-mode")]
 use std::println;
 #[cfg(feature = "embassy-mode")]
@@ -53,8 +54,7 @@ where R: Read
                         embassy_time::Timer::after_ticks(5).await;
                         read += n;
                     }
-                    Err(e) => {
-                        println!("e = {:?}", e);
+                    Err(_) => {
                         return Err("error while reading body".into());
                     }
                 }
@@ -187,7 +187,7 @@ pub async fn handle_get_chunk((dir_name, id): (String, String), query: picoserve
             fman, raw_file, idx: query.idx
         }))
     }).await.map_err(|e| {
-        picoserve::response::Response::new(StatusCode::INTERNAL_SERVER_ERROR, format!("{:?}", e))
+        Response::new(StatusCode::INTERNAL_SERVER_ERROR, format!("{:?}", e))
     })
 }
 

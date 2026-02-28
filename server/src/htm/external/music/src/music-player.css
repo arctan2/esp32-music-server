@@ -1,0 +1,24 @@
+#music-player{
+	display: flex;
+	height: 5rem;
+	width: 100%;
+	background-color: rgb(40, 40, 40);
+	border-top: 4px solid var(--orange);
+	position: fixed;
+	bottom: 0;
+	left: 0;
+}
+
+.name-player{
+	display: flex;
+	flex-direction: column;
+	padding: 0.5rem;
+}
+
+.name-player h2 {
+	font-size: 1rem;
+	margin-bottom: 0.75rem;
+	color: var(--green);
+	overflow: hidden;
+	line-clamp: 2;
+}

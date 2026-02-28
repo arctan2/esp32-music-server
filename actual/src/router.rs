@@ -8,7 +8,7 @@ use crate::types::{WifiSsidPwd, WifiStatus};
 use server::{CatchAll, HOME_PAGE};
 use crate::types::String;
 
-static CONFIG_PAGE: &str = include_str!("./htm/config.htm");
+static CONFIG_PAGE: &str = include_str!("../../server/src/htm/config.htm");
 static STATUS_SIGNAL: Signal<CriticalSectionRawMutex, WifiStatus> = Signal::new();
 static FLASH_DATA_SIGNAL: Signal<CriticalSectionRawMutex, WifiSsidPwd> = Signal::new();
 
@@ -85,7 +85,8 @@ pub fn router() -> Router<impl PathRouter> {
 
         .route(("/delete", parse_path_segment::<String>(), parse_path_segment::<String>()), delete(server::delete::handle_delete))
         .route(("/list", parse_path_segment::<String>()), get(server::list::handle_list))
-        .route(("/chunk", parse_path_segment::<String>(), parse_path_segment::<String>()), get(server::chunk::handle_get_chunk))
+        // .route(("/chunk", parse_path_segment::<String>(), parse_path_segment::<String>()), get(server::chunk::handle_get_chunk))
+        .route(("/stream", parse_path_segment::<String>(), parse_path_segment::<String>()), get(server::range::handle_range_request))
         .route(("/upload-new", parse_path_segment::<String>()), post(server::upload::new))
         .route(("/upload-chunk", parse_path_segment::<String>()), post(server::upload::chunk))
         .route(("/upload-end", parse_path_segment::<String>()), post(server::upload::end))
