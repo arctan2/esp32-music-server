@@ -1,8 +1,8 @@
 #music-player{
 	display: flex;
-	height: 5rem;
-	width: 100%;
-	background-color: rgb(40, 40, 40);
+	height: 6.5rem;
+	min-width: 100%;
+	background-color: rgb(255, 255, 255);
 	border-top: 4px solid var(--orange);
 	position: fixed;
 	bottom: 0;
@@ -12,13 +12,41 @@
 .name-player{
 	display: flex;
 	flex-direction: column;
+	align-items: center;
+	justify-content: center;
 	padding: 0.5rem;
+	width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .name-player h2 {
+	min-width: 100%;
 	font-size: 1rem;
-	margin-bottom: 0.75rem;
-	color: var(--green);
-	overflow: hidden;
-	line-clamp: 2;
+	margin-bottom: 1rem;
+	color: black;
+	white-space: nowrap;
+	text-align: center;
 }
+
+audio {
+	--bg: rgb(255, 255, 255);
+	width: 100%;
+	background: var(--bg);
+}
+
+audio::-webkit-media-controls-panel {
+	background-color: var(--bg);
+	color: var(--bg);
+}
+
+audio::-webkit-media-controls-play-button {
+	background-color: var(--green);
+	border-radius: 50%;
+}
+
+audio::-webkit-media-controls-current-time-display,
+audio::-webkit-media-controls-time-remaining-display {
+	color: black;
+}
+

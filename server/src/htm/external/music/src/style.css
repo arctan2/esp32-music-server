@@ -37,3 +37,9 @@ body{
 	background-color: rgb(171, 186, 176);
 }
 
+.msg{
+	text-align: center;
+	font-size: 1rem;
+	color: white;
+	font-style: italic;
+}

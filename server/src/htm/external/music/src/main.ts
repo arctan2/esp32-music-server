@@ -10,9 +10,13 @@ const { div } = van.tags;
 const Root = () => {
 	return div({ id: "root" },
 		div({ id: "music-list", className: "scroll-bar" },
-		   MusicList.mount(),
+		   MusicList.render(),
 		),
-		MusicList.curPlaying.val !== null ? MusicPlayer.mount() : null
+		() => {
+			const curPlaying = MusicList.curPlaying.val;
+			if(curPlaying === null) return null;
+			return MusicList.curPlaying.val !== null ? MusicPlayer.render(curPlaying) : null
+		}
 	)
 }
 

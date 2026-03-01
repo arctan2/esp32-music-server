@@ -7,6 +7,7 @@
 	height: 90%;
 	background-color: rgba(0, 0, 0, 0.2);
 	overflow: auto;
+	padding-bottom: 6.5rem;
 }
 
 .music{
@@ -47,7 +48,7 @@
 	background-color: var(--orange);
 }
 
-.playing .play-icon{
+.playing .play-icon.play{
 	border-left: calc(var(--size) * 2) solid white;
 }
 
@@ -68,6 +69,12 @@
 }
 
 .play-icon {
+	width: 0;
+	height: 0;
+	pointer-events: none;
+}
+
+.play-icon.play {
 	--size: 0.75rem;
 	width: 0;
 	height: 0;
@@ -75,6 +82,29 @@
 	border-bottom: var(--size) solid transparent;
 	border-left: calc(var(--size) * 2) solid var(--pink);
 	margin: var(--size);
+}
+
+.play-icon.pause {
+	--size: 1.5rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.play-icon.pause::before, .play-icon.pause::after {
+	content: "";
+	min-width: 0.5rem;
+	height: var(--size);
+	background-color: white;
+	pointer-events: none;
+}
+
+.play-icon.pause::before {
+	transform: translateX(-0.25rem);
+}
+
+.play-icon.pause::after {
+	transform: translateX(0.25rem);
 }
 
 @media (max-width: 500px) {
